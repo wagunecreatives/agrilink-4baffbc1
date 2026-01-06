@@ -76,9 +76,11 @@ export function ProductCard({ listing }: ProductCardProps) {
             View
           </Link>
         </Button>
-        <Button className="flex-1" disabled={!listing.is_available}>
-          <ShoppingCart className="w-4 h-4 mr-2" />
-          Buy
+        <Button asChild className="flex-1" disabled={!listing.is_available}>
+          <Link to={`/marketplace/${listing.id}`}>
+            <ShoppingCart className="w-4 h-4 mr-2" />
+            Buy
+          </Link>
         </Button>
       </CardFooter>
     </Card>

@@ -10,6 +10,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import Marketplace from "./pages/Marketplace";
+import ProductDetail from "./pages/ProductDetail";
 import CreateListing from "./pages/CreateListing";
 import NotFound from "./pages/NotFound";
 
@@ -27,6 +28,7 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/marketplace" element={<Marketplace />} />
+            <Route path="/marketplace/:id" element={<ProductDetail />} />
             <Route
               path="/marketplace/new"
               element={
