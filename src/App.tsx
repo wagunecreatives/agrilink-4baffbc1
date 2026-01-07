@@ -13,6 +13,7 @@ import Marketplace from "./pages/Marketplace";
 import ProductDetail from "./pages/ProductDetail";
 import CreateListing from "./pages/CreateListing";
 import CropDiagnosis from "./pages/CropDiagnosis";
+import FarmingTips from "./pages/FarmingTips";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,6 +48,14 @@ const App = () => (
               }
             />
             <Route path="/crop-diagnosis" element={<CropDiagnosis />} />
+            <Route
+              path="/tips"
+              element={
+                <ProtectedRoute>
+                  <FarmingTips />
+                </ProtectedRoute>
+              }
+            />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
