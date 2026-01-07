@@ -26,7 +26,7 @@ export function Navbar() {
 
   const navLinks = [
     { href: '/marketplace', label: 'Marketplace' },
-    { href: '/diagnosis', label: 'AI Diagnosis' },
+    { href: '/crop-diagnosis', label: 'AI Diagnosis' },
     { href: '/tips', label: 'Farming Tips' },
     { href: '/about', label: 'About' },
   ];

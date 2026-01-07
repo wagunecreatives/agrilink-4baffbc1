@@ -12,6 +12,7 @@ import Dashboard from "./pages/Dashboard";
 import Marketplace from "./pages/Marketplace";
 import ProductDetail from "./pages/ProductDetail";
 import CreateListing from "./pages/CreateListing";
+import CropDiagnosis from "./pages/CropDiagnosis";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,9 +43,10 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Dashboard />
-                </ProtectedRoute>
+              </ProtectedRoute>
               }
             />
+            <Route path="/crop-diagnosis" element={<CropDiagnosis />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
