@@ -33,7 +33,16 @@ import {
   MessageSquare,
   Loader2,
   Package,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
 
 export default function ProductDetail() {
   const { id } = useParams<{ id: string }>();
@@ -252,17 +261,49 @@ export default function ProductDetail() {
           <div className="lg:col-span-2 space-y-6">
             {/* Product image */}
             <Card className="overflow-hidden">
-              <div className="aspect-video bg-muted flex items-center justify-center">
-                {listing.images && listing.images.length > 0 ? (
-                  <img
-                    src={listing.images[0]}
-                    alt={listing.title}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
+              {listing.images && listing.images.length > 0 ? (
+                <Carousel className="w-full">
+                  <CarouselContent>
+                    {listing.images.map((image, index) => (
+                      <CarouselItem key={index}>
+                        <div className="aspect-video bg-muted">
+                          <img
+                            src={image}
+                            alt={`${listing.title} - Image ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      </CarouselItem>
+                    ))}
+                  </CarouselContent>
+                  {listing.images.length > 1 && (
+                    <>
+                      <CarouselPrevious className="left-4" />
+                      <CarouselNext className="right-4" />
+                    </>
+                  )}
+                </Carousel>
+              ) : (
+                <div className="aspect-video bg-muted flex items-center justify-center">
                   <Package className="h-24 w-24 text-muted-foreground" />
-                )}
-              </div>
+                </div>
+              )}
+              {listing.images && listing.images.length > 1 && (
+                <div className="flex gap-2 p-4 overflow-x-auto">
+                  {listing.images.map((image, index) => (
+                    <div
+                      key={index}
+                      className="w-20 h-20 flex-shrink-0 rounded-md overflow-hidden border-2 border-border hover:border-primary transition-colors cursor-pointer"
+                    >
+                      <img
+                        src={image}
+                        alt={`Thumbnail ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </Card>
 
             {/* Product details */}
