@@ -26,7 +26,8 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { Loader2, ImagePlus } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import { ImageUpload } from './ImageUpload';
 
 const listingSchema = z.object({
   title: z.string().min(5, 'Title must be at least 5 characters').max(100),
@@ -58,6 +59,7 @@ export function CreateListingForm() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [images, setImages] = useState<string[]>([]);
 
   const form = useForm<ListingFormData>({
     resolver: zodResolver(listingSchema),
@@ -92,7 +94,7 @@ export function CreateListingForm() {
         price_per_unit: data.price_per_unit,
         currency: data.currency,
         location: data.location,
-        images: [],
+        images: images,
         is_available: true,
         views_count: 0,
       });
@@ -247,11 +249,9 @@ export function CreateListingForm() {
               />
             </div>
 
-            <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
-              <ImagePlus className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
-              <p className="text-muted-foreground">
-                Image upload coming soon
-              </p>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Product Images</label>
+              <ImageUpload images={images} onImagesChange={setImages} maxImages={5} />
             </div>
 
             <div className="flex gap-3 pt-4">
