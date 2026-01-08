@@ -35,7 +35,7 @@ export function SignupForm() {
     } else {
       toast({
         title: 'Account created!',
-        description: 'Please check your email to verify your account.',
+        description: 'You can now sign in.',
       });
       navigate('/login');
     }
