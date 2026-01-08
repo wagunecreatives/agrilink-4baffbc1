@@ -14,6 +14,7 @@ import ProductDetail from "./pages/ProductDetail";
 import CreateListing from "./pages/CreateListing";
 import CropDiagnosis from "./pages/CropDiagnosis";
 import FarmingTips from "./pages/FarmingTips";
+import DirectMessages from "./pages/DirectMessages";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -53,6 +54,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <FarmingTips />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/messages"
+              element={
+                <ProtectedRoute>
+                  <DirectMessages />
                 </ProtectedRoute>
               }
             />

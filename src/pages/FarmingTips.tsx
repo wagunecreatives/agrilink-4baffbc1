@@ -10,7 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Send, Users, MessageCircle, Lightbulb, Trash2 } from "lucide-react";
+import { Send, Users, MessageCircle, Lightbulb, Trash2, MessageSquare } from "lucide-react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -167,7 +168,7 @@ const FarmingTips = () => {
           </div>
 
           {/* Stats Bar */}
-          <div className="flex gap-4 mb-6">
+          <div className="flex flex-wrap gap-4 mb-6">
             <Badge variant="secondary" className="flex items-center gap-2 px-4 py-2">
               <Users className="h-4 w-4" />
               <span>{onlineUsers} farmers online</span>
@@ -176,6 +177,12 @@ const FarmingTips = () => {
               <MessageCircle className="h-4 w-4" />
               <span>{messages.length} messages</span>
             </Badge>
+            <Link to="/messages">
+              <Badge variant="default" className="flex items-center gap-2 px-4 py-2 cursor-pointer hover:opacity-80">
+                <MessageSquare className="h-4 w-4" />
+                <span>Direct Messages</span>
+              </Badge>
+            </Link>
           </div>
 
           {/* Chat Card */}
