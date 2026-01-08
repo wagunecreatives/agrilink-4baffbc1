@@ -1,6 +1,14 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = "https://perdmslbgykblhafzpxo.supabase.co";
-const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBlcmRtc2xiZ3lrYmxoYWZ6cHhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc1ODYyMzksImV4cCI6MjA4MzE2MjIzOX0.c2i3O_o4TGT8RqREtQXUSCKiZKehiyztK_mpQJN2eg8";
+// Untyped client to avoid generated-types mismatches while still using Lovable Cloud env vars.
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: {
+    storage: localStorage,
+    persistSession: true,
+    autoRefreshToken: true,
+  },
+});
+
