@@ -10,12 +10,15 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ listing }: ProductCardProps) {
-  const formatPrice = (price: number, currency: string) => {
+  const formatPrice = (price: number, currency: string = 'USD') => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency,
     }).format(price);
   };
+
+  const isAvailable = listing.status === 'active';
+  const price = listing.price;
 
   return (
     <Card className="group overflow-hidden hover:shadow-medium transition-all">
@@ -31,7 +34,7 @@ export function ProductCard({ listing }: ProductCardProps) {
             <ShoppingCart className="w-12 h-12 text-muted-foreground/50" />
           </div>
         )}
-        {!listing.is_available && (
+        {!isAvailable && (
           <div className="absolute inset-0 bg-background/80 flex items-center justify-center">
             <Badge variant="secondary" className="text-lg">Sold Out</Badge>
           </div>
@@ -52,13 +55,13 @@ export function ProductCard({ listing }: ProductCardProps) {
         
         <div className="flex items-center gap-1 text-sm text-muted-foreground mt-3">
           <MapPin className="w-4 h-4" />
-          <span className="line-clamp-1">{listing.location}</span>
+          <span className="line-clamp-1">{listing.location || 'Location not specified'}</span>
         </div>
         
         <div className="flex items-center justify-between mt-4">
           <div>
             <p className="text-2xl font-display font-bold text-primary">
-              {formatPrice(listing.price_per_unit, listing.currency)}
+              {formatPrice(price)}
             </p>
             <p className="text-sm text-muted-foreground">per {listing.unit}</p>
           </div>
@@ -76,7 +79,7 @@ export function ProductCard({ listing }: ProductCardProps) {
             View
           </Link>
         </Button>
-        <Button asChild className="flex-1" disabled={!listing.is_available}>
+        <Button asChild className="flex-1" disabled={!isAvailable}>
           <Link to={`/marketplace/${listing.id}`}>
             <ShoppingCart className="w-4 h-4 mr-2" />
             Buy

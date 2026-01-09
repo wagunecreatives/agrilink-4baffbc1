@@ -25,8 +25,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import { ImageUpload } from './ImageUpload';
 
 const listingSchema = z.object({
@@ -35,8 +36,7 @@ const listingSchema = z.object({
   crop_type: z.string().min(1, 'Please select a crop type'),
   quantity: z.coerce.number().positive('Quantity must be positive'),
   unit: z.string().min(1, 'Please select a unit'),
-  price_per_unit: z.coerce.number().positive('Price must be positive'),
-  currency: z.string().default('USD'),
+  price: z.coerce.number().positive('Price must be positive'),
   location: z.string().min(2, 'Please enter a location'),
 });
 
@@ -57,9 +57,12 @@ const units = ['kg', 'lb', 'ton', 'piece', 'dozen', 'crate', 'bushel', 'bag'];
 
 export function CreateListingForm() {
   const navigate = useNavigate();
-  const { user, profile } = useAuth();
+  const { user, isApprovedFarmer, profile, roles } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [images, setImages] = useState<string[]>([]);
+
+  const isFarmer = roles.includes('farmer');
+  const isPendingApproval = isFarmer && profile?.approval_status === 'pending';
 
   const form = useForm<ListingFormData>({
     resolver: zodResolver(listingSchema),
@@ -69,9 +72,8 @@ export function CreateListingForm() {
       crop_type: '',
       quantity: undefined,
       unit: 'kg',
-      price_per_unit: undefined,
-      currency: 'USD',
-      location: profile?.location || '',
+      price: undefined,
+      location: '',
     },
   });
 
@@ -81,22 +83,25 @@ export function CreateListingForm() {
       return;
     }
 
+    if (!isApprovedFarmer) {
+      toast.error('Your farmer account must be approved to create listings');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
       const { error } = await supabase.from('market_listings').insert({
-        farmer_id: user.id,
+        seller_id: user.id,
         title: data.title,
         description: data.description,
         crop_type: data.crop_type,
         quantity: data.quantity,
         unit: data.unit,
-        price_per_unit: data.price_per_unit,
-        currency: data.currency,
+        price: data.price,
         location: data.location,
         images: images,
-        is_available: true,
-        views_count: 0,
+        status: 'active',
       });
 
       if (error) throw error;
@@ -109,6 +114,56 @@ export function CreateListingForm() {
       setIsSubmitting(false);
     }
   };
+
+  if (isPendingApproval) {
+    return (
+      <Card className="max-w-2xl mx-auto shadow-soft">
+        <CardHeader>
+          <CardTitle className="text-2xl font-display">Create New Listing</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Your farmer account is pending admin approval. You'll be able to create listings once approved.
+            </AlertDescription>
+          </Alert>
+          <Button
+            variant="outline"
+            className="mt-4 w-full"
+            onClick={() => navigate('/marketplace')}
+          >
+            Back to Marketplace
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!isApprovedFarmer) {
+    return (
+      <Card className="max-w-2xl mx-auto shadow-soft">
+        <CardHeader>
+          <CardTitle className="text-2xl font-display">Create New Listing</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Only approved farmers can create listings. Please sign up as a farmer and wait for admin approval.
+            </AlertDescription>
+          </Alert>
+          <Button
+            variant="outline"
+            className="mt-4 w-full"
+            onClick={() => navigate('/marketplace')}
+          >
+            Back to Marketplace
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="max-w-2xl mx-auto shadow-soft">
@@ -236,7 +291,7 @@ export function CreateListingForm() {
 
               <FormField
                 control={form.control}
-                name="price_per_unit"
+                name="price"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Price per Unit ($)</FormLabel>

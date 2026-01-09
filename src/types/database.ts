@@ -1,20 +1,24 @@
 export type UserRole = 'farmer' | 'customer' | 'admin';
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 
 export interface Profile {
   id: string;
-  email: string;
+  email: string | null;
   full_name: string | null;
-  phone: string | null;
-  location: string | null;
   avatar_url: string | null;
+  approval_status: ApprovalStatus;
   created_at: string;
   updated_at: string;
+  // Optional fields that may exist on some profiles
+  phone?: string | null;
+  location?: string | null;
 }
 
 export interface UserRoleRecord {
   id: string;
   user_id: string;
   role: UserRole;
+  created_at: string;
 }
 
 export interface Crop {
@@ -60,21 +64,24 @@ export interface DiagnosisRequest {
 
 export interface MarketListing {
   id: string;
-  farmer_id: string;
-  crop_id: string | null;
+  seller_id: string;
   title: string;
   description: string | null;
   crop_type: string;
   quantity: number;
   unit: string;
-  price_per_unit: number;
-  currency: string;
-  location: string;
-  images: string[];
-  is_available: boolean;
-  views_count: number;
+  price: number;
+  location: string | null;
+  images: string[] | null;
+  status: string;
   created_at: string;
   updated_at: string;
+  // Computed or optional fields for UI compatibility
+  is_available?: boolean;
+  price_per_unit?: number;
+  currency?: string;
+  farmer_id?: string;
+  views_count?: number;
 }
 
 export interface Order {
