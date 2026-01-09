@@ -26,15 +26,12 @@ import {
   MapPin,
   User,
   Mail,
-  Phone,
   Calendar,
   Eye,
   ShoppingCart,
   MessageSquare,
   Loader2,
   Package,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 import {
   Carousel,
@@ -63,7 +60,6 @@ export default function ProductDetail() {
   useEffect(() => {
     if (id) {
       fetchListing();
-      incrementViewCount();
     }
   }, [id]);
 
@@ -92,7 +88,7 @@ export default function ProductDetail() {
       const { data: sellerData } = await supabase
         .from("profiles")
         .select("*")
-        .eq("id", listingData.farmer_id)
+        .eq("id", listingData.seller_id)
         .maybeSingle();
 
       setSeller(sellerData);
@@ -108,16 +104,7 @@ export default function ProductDetail() {
     }
   };
 
-  const incrementViewCount = async () => {
-    if (!id) return;
-    try {
-      await supabase.rpc("increment_views", { listing_id: id });
-    } catch {
-      // Silently fail - view count is not critical
-    }
-  };
-
-  const formatPrice = (price: number, currency: string) => {
+  const formatPrice = (price: number, currency: string = "USD") => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: currency,
@@ -149,12 +136,12 @@ export default function ProductDetail() {
       const { error } = await supabase.from("orders").insert({
         listing_id: listing.id,
         customer_id: user.id,
-        farmer_id: listing.farmer_id,
+        farmer_id: listing.seller_id,
         quantity: purchaseQuantity,
-        total_price: purchaseQuantity * listing.price_per_unit,
+        total_price: purchaseQuantity * listing.price,
         status: "pending",
         payment_status: "pending",
-        delivery_address: "", // Would be collected in a real flow
+        delivery_address: "",
       });
 
       if (error) throw error;
@@ -201,7 +188,7 @@ export default function ProductDetail() {
     try {
       const { error } = await supabase.from("messages").insert({
         sender_id: user.id,
-        receiver_id: listing.farmer_id,
+        receiver_id: listing.seller_id,
         listing_id: listing.id,
         content: message,
       });
@@ -240,8 +227,9 @@ export default function ProductDetail() {
 
   if (!listing) return null;
 
-  const totalPrice = purchaseQuantity * listing.price_per_unit;
-  const isOwnListing = user?.id === listing.farmer_id;
+  const totalPrice = purchaseQuantity * listing.price;
+  const isOwnListing = user?.id === listing.seller_id;
+  const isAvailable = listing.status === "active";
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -314,14 +302,14 @@ export default function ProductDetail() {
                     <CardTitle className="text-2xl">{listing.title}</CardTitle>
                     <div className="flex items-center gap-2 mt-2">
                       <Badge variant="secondary">{listing.crop_type}</Badge>
-                      <Badge variant={listing.is_available ? "default" : "destructive"}>
-                        {listing.is_available ? "Available" : "Sold Out"}
+                      <Badge variant={isAvailable ? "default" : "destructive"}>
+                        {isAvailable ? "Available" : "Sold Out"}
                       </Badge>
                     </div>
                   </div>
                   <div className="text-right">
                     <p className="text-3xl font-bold text-primary">
-                      {formatPrice(listing.price_per_unit, listing.currency)}
+                      {formatPrice(listing.price)}
                     </p>
                     <p className="text-sm text-muted-foreground">per {listing.unit}</p>
                   </div>
@@ -344,17 +332,13 @@ export default function ProductDetail() {
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span>{listing.location}</span>
+                    <span>{listing.location || "Location not specified"}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     <span>
                       Listed {new Date(listing.created_at).toLocaleDateString()}
                     </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <Eye className="h-4 w-4 text-muted-foreground" />
-                    <span>{listing.views_count} views</span>
                   </div>
                 </div>
               </CardContent>
@@ -381,24 +365,10 @@ export default function ProductDetail() {
                   </div>
                 </div>
 
-                {seller?.location && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span>{seller.location}</span>
-                  </div>
-                )}
-
                 {seller?.email && (
                   <div className="flex items-center gap-2 text-sm">
                     <Mail className="h-4 w-4 text-muted-foreground" />
                     <span>{seller.email}</span>
-                  </div>
-                )}
-
-                {seller?.phone && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                    <span>{seller.phone}</span>
                   </div>
                 )}
 
@@ -451,7 +421,7 @@ export default function ProductDetail() {
             </Card>
 
             {/* Purchase card */}
-            {!isOwnListing && listing.is_available && (
+            {!isOwnListing && isAvailable && (
               <Card className="border-primary">
                 <CardHeader>
                   <CardTitle className="text-lg">Make a Purchase</CardTitle>
@@ -477,7 +447,7 @@ export default function ProductDetail() {
                   <div className="border-t pt-4">
                     <div className="flex justify-between text-sm">
                       <span>Price per {listing.unit}</span>
-                      <span>{formatPrice(listing.price_per_unit, listing.currency)}</span>
+                      <span>{formatPrice(listing.price)}</span>
                     </div>
                     <div className="flex justify-between text-sm mt-1">
                       <span>Quantity</span>
@@ -488,7 +458,7 @@ export default function ProductDetail() {
                     <div className="flex justify-between font-bold text-lg mt-3 border-t pt-3">
                       <span>Total</span>
                       <span className="text-primary">
-                        {formatPrice(totalPrice, listing.currency)}
+                        {formatPrice(totalPrice)}
                       </span>
                     </div>
                   </div>
@@ -505,11 +475,28 @@ export default function ProductDetail() {
                         <DialogTitle>Confirm Purchase</DialogTitle>
                         <DialogDescription>
                           You are about to purchase {purchaseQuantity} {listing.unit} of{" "}
-                          {listing.title} for{" "}
-                          {formatPrice(totalPrice, listing.currency)}.
+                          {listing.title}.
                         </DialogDescription>
                       </DialogHeader>
-                      <div className="py-4">
+                      <div className="space-y-4">
+                        <div className="bg-muted p-4 rounded-lg">
+                          <div className="flex justify-between text-sm">
+                            <span>Product</span>
+                            <span className="font-medium">{listing.title}</span>
+                          </div>
+                          <div className="flex justify-between text-sm mt-2">
+                            <span>Quantity</span>
+                            <span>
+                              {purchaseQuantity} {listing.unit}
+                            </span>
+                          </div>
+                          <div className="flex justify-between font-bold mt-3 pt-3 border-t">
+                            <span>Total</span>
+                            <span className="text-primary">
+                              {formatPrice(totalPrice)}
+                            </span>
+                          </div>
+                        </div>
                         <p className="text-sm text-muted-foreground">
                           The seller will be notified and will contact you to arrange
                           payment and delivery.
@@ -531,16 +518,6 @@ export default function ProductDetail() {
                       </DialogFooter>
                     </DialogContent>
                   </Dialog>
-                </CardContent>
-              </Card>
-            )}
-
-            {isOwnListing && (
-              <Card>
-                <CardContent className="pt-6">
-                  <p className="text-sm text-muted-foreground text-center">
-                    This is your listing. You cannot purchase your own products.
-                  </p>
                 </CardContent>
               </Card>
             )}

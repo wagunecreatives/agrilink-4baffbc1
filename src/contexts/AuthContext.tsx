@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { Profile, UserRole } from '@/types/database';
+import { Profile, UserRole, ApprovalStatus } from '@/types/database';
 
 interface AuthContextType {
   user: User | null;
@@ -9,6 +9,7 @@ interface AuthContextType {
   profile: Profile | null;
   roles: UserRole[];
   isLoading: boolean;
+  isApprovedFarmer: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string, role: UserRole) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -142,6 +143,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return roles.includes(role);
   }
 
+  const isApprovedFarmer = 
+    roles.includes('farmer') && profile?.approval_status === 'approved';
+
   return (
     <AuthContext.Provider
       value={{
@@ -150,6 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         profile,
         roles,
         isLoading,
+        isApprovedFarmer,
         signIn,
         signUp,
         signOut,

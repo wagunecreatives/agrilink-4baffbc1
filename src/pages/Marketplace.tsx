@@ -11,14 +11,15 @@ import { MarketListing } from '@/types/database';
 import { Plus, ShoppingCart, Loader2 } from 'lucide-react';
 
 export default function Marketplace() {
-  const { roles } = useAuth();
+  const { roles, profile, isApprovedFarmer } = useAuth();
   const [listings, setListings] = useState<MarketListing[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [cropType, setCropType] = useState('All');
   const [sortBy, setSortBy] = useState('newest');
 
-  const isFarmer = roles.includes('farmer') || roles.includes('admin');
+  const isFarmer = roles.includes('farmer');
+  const isPendingApproval = isFarmer && profile?.approval_status === 'pending';
 
   useEffect(() => {
     fetchListings();
@@ -30,7 +31,7 @@ export default function Marketplace() {
       let query = supabase
         .from('market_listings')
         .select('*')
-        .eq('is_available', true);
+        .eq('status', 'active');
 
       if (cropType !== 'All') {
         query = query.eq('crop_type', cropType);
@@ -38,10 +39,10 @@ export default function Marketplace() {
 
       switch (sortBy) {
         case 'price_low':
-          query = query.order('price_per_unit', { ascending: true });
+          query = query.order('price', { ascending: true });
           break;
         case 'price_high':
-          query = query.order('price_per_unit', { ascending: false });
+          query = query.order('price', { ascending: false });
           break;
         case 'popular':
           query = query.order('views_count', { ascending: false });
@@ -64,7 +65,7 @@ export default function Marketplace() {
   const filteredListings = listings.filter((listing) =>
     listing.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     listing.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    listing.location.toLowerCase().includes(searchQuery.toLowerCase())
+    listing.location?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const clearFilters = () => {
@@ -87,7 +88,11 @@ export default function Marketplace() {
                 Browse fresh produce directly from local farmers
               </p>
             </div>
-            {isFarmer && (
+            {isPendingApproval ? (
+              <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-2 rounded-lg text-sm">
+                Your farmer account is pending admin approval
+              </div>
+            ) : isApprovedFarmer && (
               <Button asChild className="gradient-hero text-primary-foreground">
                 <Link to="/marketplace/new">
                   <Plus className="w-4 h-4 mr-2" />
@@ -134,7 +139,7 @@ export default function Marketplace() {
                   ? 'Try adjusting your filters to find what you\'re looking for'
                   : 'Be the first to list your produce on the marketplace'}
               </p>
-              {isFarmer && (
+              {isApprovedFarmer && (
                 <Button asChild>
                   <Link to="/marketplace/new">
                     <Plus className="w-4 h-4 mr-2" />
