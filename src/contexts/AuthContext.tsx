@@ -25,10 +25,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    let isMounted = true;
+
+    // Listen for auth changes (set up BEFORE getSession)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!isMounted) return;
+
       setSession(session);
       setUser(session?.user ?? null);
+
+      if (session?.user) {
+        await fetchUserData(session.user.id);
+      } else {
+        setProfile(null);
+        setRoles([]);
+        setIsLoading(false);
+      }
+    });
+
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!isMounted) return;
+
+      setSession(session);
+      setUser(session?.user ?? null);
+
       if (session?.user) {
         fetchUserData(session.user.id);
       } else {
@@ -36,22 +59,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          await fetchUserData(session.user.id);
-        } else {
-          setProfile(null);
-          setRoles([]);
-          setIsLoading(false);
-        }
-      }
-    );
-
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   async function fetchUserData(userId: string) {
@@ -80,28 +91,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signIn(email: string, password: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+
     const { error } = await supabase.auth.signInWithPassword({
-      email,
+      email: normalizedEmail,
       password,
     });
+
+    if (error) console.error('Sign-in error:', error);
     return { error };
   }
 
   async function signUp(email: string, password: string, fullName: string, role: UserRole) {
+    const normalizedEmail = email.trim().toLowerCase();
+
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: normalizedEmail,
       password,
       options: {
+        emailRedirectTo: window.location.origin,
         data: {
           full_name: fullName,
-          role: role,
+          role,
         },
       },
     });
 
-    if (error) return { error };
+    if (error) {
+      console.error('Sign-up error:', error);
+      return { error };
+    }
 
-    // The profile and role will be created by database triggers
+    // If signup didn't actually create a user, treat as an error so the UI doesn't claim success.
+    if (!data?.user) {
+      return { error: new Error('Signup did not complete. Please try again.') };
+    }
+
     return { error: null };
   }
 
