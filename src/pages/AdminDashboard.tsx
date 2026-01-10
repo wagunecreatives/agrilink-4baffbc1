@@ -56,19 +56,21 @@ export default function AdminDashboard() {
   const { hasRole, isLoading: authLoading } = useAuth();
   const [pendingFarmers, setPendingFarmers] = useState<PendingFarmer[]>([]);
   const [users, setUsers] = useState<UserWithRoles[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [selectedRole, setSelectedRole] = useState<UserRole>('admin');
   const [isAddingRole, setIsAddingRole] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const isAdmin = hasRole('admin');
+  const isAdmin = !authLoading && hasRole('admin');
 
   useEffect(() => {
     if (isAdmin) {
-      fetchPendingFarmers();
-      fetchUsers();
+      setIsLoading(true);
+      Promise.all([fetchPendingFarmers(), fetchUsers()]).finally(() => {
+        setIsLoading(false);
+      });
     }
   }, [isAdmin]);
 
@@ -117,8 +119,6 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error('Error fetching users:', error);
       toast.error('Failed to fetch users');
-    } finally {
-      setIsLoading(false);
     }
   }
 
@@ -196,7 +196,7 @@ export default function AdminDashboard() {
     }
   }
 
-  if (authLoading || isLoading) {
+  if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -204,7 +204,7 @@ export default function AdminDashboard() {
     );
   }
 
-  if (!isAdmin) {
+  if (!hasRole('admin')) {
     return <Navigate to="/dashboard" replace />;
   }
 
