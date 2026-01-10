@@ -10,6 +10,7 @@ import About from "./pages/About";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
+import AdminDashboard from "./pages/AdminDashboard";
 import Marketplace from "./pages/Marketplace";
 import ProductDetail from "./pages/ProductDetail";
 import CreateListing from "./pages/CreateListing";
@@ -46,7 +47,15 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Dashboard />
-              </ProtectedRoute>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute>
+                  <AdminDashboard />
+                </ProtectedRoute>
               }
             />
             <Route path="/crop-diagnosis" element={<CropDiagnosis />} />
