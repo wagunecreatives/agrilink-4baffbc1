@@ -202,51 +202,7 @@ export type Database = {
       }
     }
     Views: {
-      market_listings_public: {
-        Row: {
-          created_at: string | null
-          crop_type: string | null
-          description: string | null
-          id: string | null
-          images: string[] | null
-          location: string | null
-          price: number | null
-          quantity: number | null
-          status: string | null
-          title: string | null
-          unit: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          crop_type?: string | null
-          description?: string | null
-          id?: string | null
-          images?: string[] | null
-          location?: never
-          price?: number | null
-          quantity?: number | null
-          status?: string | null
-          title?: string | null
-          unit?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          crop_type?: string | null
-          description?: string | null
-          id?: string | null
-          images?: string[] | null
-          location?: never
-          price?: number | null
-          quantity?: number | null
-          status?: string | null
-          title?: string | null
-          unit?: string | null
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       get_all_public_profiles: {
@@ -257,25 +213,6 @@ export type Database = {
           created_at: string
           full_name: string
           id: string
-          updated_at: string
-        }[]
-      }
-      get_listing_with_seller: {
-        Args: { listing_id: string }
-        Returns: {
-          created_at: string
-          crop_type: string
-          description: string
-          id: string
-          images: string[]
-          location: string
-          price: number
-          quantity: number
-          seller_id: string
-          seller_name: string
-          status: string
-          title: string
-          unit: string
           updated_at: string
         }[]
       }
