@@ -53,7 +53,7 @@ interface UserWithRoles {
 }
 
 export default function AdminDashboard() {
-  const { hasRole, isLoading: authLoading } = useAuth();
+  const { hasRole, isLoading: authLoading, user } = useAuth();
   const [pendingFarmers, setPendingFarmers] = useState<PendingFarmer[]>([]);
   const [users, setUsers] = useState<UserWithRoles[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -63,16 +63,16 @@ export default function AdminDashboard() {
   const [isAddingRole, setIsAddingRole] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const isAdmin = !authLoading && hasRole('admin');
+  const isAdmin = hasRole('admin');
 
   useEffect(() => {
-    if (isAdmin) {
+    if (!authLoading && isAdmin) {
       setIsLoading(true);
       Promise.all([fetchPendingFarmers(), fetchUsers()]).finally(() => {
         setIsLoading(false);
       });
     }
-  }, [isAdmin]);
+  }, [authLoading, isAdmin]);
 
   async function fetchPendingFarmers() {
     try {
@@ -204,7 +204,11 @@ export default function AdminDashboard() {
     );
   }
 
-  if (!hasRole('admin')) {
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!isAdmin) {
     return <Navigate to="/dashboard" replace />;
   }
 
