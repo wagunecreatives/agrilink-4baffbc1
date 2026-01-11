@@ -205,6 +205,28 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_all_public_profiles: {
+        Args: never
+        Returns: {
+          approval_status: Database["public"]["Enums"]["approval_status"]
+          avatar_url: string
+          created_at: string
+          full_name: string
+          id: string
+          updated_at: string
+        }[]
+      }
+      get_public_profile: {
+        Args: { profile_id: string }
+        Returns: {
+          approval_status: Database["public"]["Enums"]["approval_status"]
+          avatar_url: string
+          created_at: string
+          full_name: string
+          id: string
+          updated_at: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
