@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { Profile, UserRole, ApprovalStatus } from '@/types/database';
@@ -25,6 +25,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [roles, setRoles] = useState<UserRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Prevent duplicate profile/role fetches on initial load (getSession + INITIAL_SESSION)
+  const userDataPromiseRef = useRef<Promise<void> | null>(null);
+
+  async function fetchUserData(userId: string) {
+    // Fetch profile + roles in parallel to minimize perceived load time
+    const [profileRes, rolesRes] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id, email, full_name, avatar_url, approval_status, created_at, updated_at')
+        .eq('id', userId)
+        .maybeSingle(),
+      supabase.from('user_roles').select('role').eq('user_id', userId),
+    ]);
+
+    if (profileRes.error) throw profileRes.error;
+    if (rolesRes.error) throw rolesRes.error;
+
+    setProfile(profileRes.data);
+    setRoles(rolesRes.data?.map((r) => r.role as UserRole) || []);
+  }
+
+  const ensureUserData = useCallback((userId: string) => {
+    if (userDataPromiseRef.current) return userDataPromiseRef.current;
+
+    setIsLoading(true);
+    userDataPromiseRef.current = fetchUserData(userId)
+      .catch((error) => {
+        console.error('Error fetching user data:', error);
+      })
+      .finally(() => {
+        userDataPromiseRef.current = null;
+        setIsLoading(false);
+      });
+
+    return userDataPromiseRef.current;
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -38,15 +75,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(session?.user ?? null);
 
       if (session?.user) {
-        await fetchUserData(session.user.id);
+        await ensureUserData(session.user.id);
       } else {
+        userDataPromiseRef.current = null;
         setProfile(null);
         setRoles([]);
         setIsLoading(false);
       }
     });
 
-    // Get initial session
+    // Get initial session (deduped with INITIAL_SESSION via ensureUserData)
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!isMounted) return;
 
@@ -54,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(session?.user ?? null);
 
       if (session?.user) {
-        fetchUserData(session.user.id);
+        void ensureUserData(session.user.id);
       } else {
         setIsLoading(false);
       }
@@ -64,32 +102,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [ensureUserData]);
 
-  async function fetchUserData(userId: string) {
-    try {
-      // Fetch profile
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-
-      setProfile(profileData);
-
-      // Fetch roles
-      const { data: rolesData } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', userId);
-
-      setRoles(rolesData?.map(r => r.role as UserRole) || []);
-    } catch (error) {
-      console.error('Error fetching user data:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }
 
   async function signIn(email: string, password: string) {
     const normalizedEmail = email.trim().toLowerCase();
