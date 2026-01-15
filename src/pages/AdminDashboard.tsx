@@ -92,7 +92,6 @@ export default function AdminDashboard() {
 
   async function fetchUsers() {
     try {
-      // Fetch all profiles
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('id, email, full_name')
@@ -100,19 +99,31 @@ export default function AdminDashboard() {
 
       if (profilesError) throw profilesError;
 
-      // Fetch all roles
+      const profileRows = profiles || [];
+      if (profileRows.length === 0) {
+        setUsers([]);
+        return;
+      }
+
+      const userIds = profileRows.map((p) => p.id);
+
       const { data: roles, error: rolesError } = await supabase
         .from('user_roles')
-        .select('user_id, role');
+        .select('user_id, role')
+        .in('user_id', userIds);
 
       if (rolesError) throw rolesError;
 
-      // Combine profiles with their roles
-      const usersWithRoles = (profiles || []).map((profile) => ({
+      // Build a map once (O(n)) instead of filtering roles per user (O(n^2))
+      const rolesByUserId = new Map<string, UserRole[]>();
+      (roles || []).forEach((r) => {
+        const next = [...(rolesByUserId.get(r.user_id) ?? []), r.role as UserRole];
+        rolesByUserId.set(r.user_id, next);
+      });
+
+      const usersWithRoles: UserWithRoles[] = profileRows.map((profile) => ({
         ...profile,
-        roles: (roles || [])
-          .filter((r) => r.user_id === profile.id)
-          .map((r) => r.role as UserRole),
+        roles: rolesByUserId.get(profile.id) ?? [],
       }));
 
       setUsers(usersWithRoles);
