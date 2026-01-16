@@ -9,10 +9,14 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, requiredRoles }: ProtectedRouteProps) {
-  const { user, roles, isLoading } = useAuth();
+  const { user, roles, isAuthLoading, isUserDataLoading } = useAuth();
   const location = useLocation();
 
-  if (isLoading) {
+  const needsRoleCheck = (requiredRoles?.length ?? 0) > 0;
+
+  // Only block the whole app while we determine if there is a session.
+  // Block on roles/profile ONLY when a route explicitly requires roles.
+  if (isAuthLoading || (needsRoleCheck && isUserDataLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -24,8 +28,8 @@ export function ProtectedRoute({ children, requiredRoles }: ProtectedRouteProps)
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (requiredRoles && requiredRoles.length > 0) {
-    const hasRequiredRole = requiredRoles.some((role) => roles.includes(role));
+  if (needsRoleCheck) {
+    const hasRequiredRole = requiredRoles!.some((role) => roles.includes(role));
     if (!hasRequiredRole) {
       return <Navigate to="/dashboard" replace />;
     }

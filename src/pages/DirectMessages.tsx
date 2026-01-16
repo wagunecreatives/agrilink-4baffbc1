@@ -46,7 +46,7 @@ interface FarmerUser {
 }
 
 const DirectMessages = () => {
-  const { user, profile, isLoading } = useAuth();
+  const { user, profile, isAuthLoading } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -62,10 +62,10 @@ const DirectMessages = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!isLoading && !user) {
+    if (!isAuthLoading && !user) {
       navigate("/login");
     }
-  }, [user, isLoading, navigate]);
+  }, [user, isAuthLoading, navigate]);
 
   // Fetch conversations
   useEffect(() => {
@@ -263,7 +263,7 @@ const DirectMessages = () => {
     f.user_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  if (isLoading) {
+  if (isAuthLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>

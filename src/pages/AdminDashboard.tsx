@@ -53,7 +53,7 @@ interface UserWithRoles {
 }
 
 export default function AdminDashboard() {
-  const { hasRole, isLoading: authLoading, user } = useAuth();
+  const { hasRole, isAuthLoading, isUserDataLoading, user } = useAuth();
   const [pendingFarmers, setPendingFarmers] = useState<PendingFarmer[]>([]);
   const [users, setUsers] = useState<UserWithRoles[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -66,13 +66,13 @@ export default function AdminDashboard() {
   const isAdmin = hasRole('admin');
 
   useEffect(() => {
-    if (!authLoading && isAdmin) {
+    if (!isAuthLoading && !isUserDataLoading && isAdmin) {
       setIsLoading(true);
       Promise.all([fetchPendingFarmers(), fetchUsers()]).finally(() => {
         setIsLoading(false);
       });
     }
-  }, [authLoading, isAdmin]);
+  }, [isAuthLoading, isUserDataLoading, isAdmin]);
 
   async function fetchPendingFarmers() {
     try {
@@ -207,7 +207,7 @@ export default function AdminDashboard() {
     }
   }
 
-  if (authLoading) {
+  if (isAuthLoading || isUserDataLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
