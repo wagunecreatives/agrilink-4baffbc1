@@ -14,9 +14,11 @@ export function ProtectedRoute({ children, requiredRoles }: ProtectedRouteProps)
 
   const needsRoleCheck = (requiredRoles?.length ?? 0) > 0;
 
-  // Only block the whole app while we determine if there is a session.
-  // Block on roles/profile ONLY when a route explicitly requires roles.
-  if (isAuthLoading || (needsRoleCheck && isUserDataLoading)) {
+  // Wait for auth loading AND user data loading when role check is needed
+  // This prevents premature redirects before roles are fetched
+  const isLoading = isAuthLoading || (needsRoleCheck && isUserDataLoading);
+
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
