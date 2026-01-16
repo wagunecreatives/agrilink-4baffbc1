@@ -8,10 +8,18 @@ interface AuthContextType {
   session: Session | null;
   profile: Profile | null;
   roles: UserRole[];
-  isLoading: boolean;
+  /** True while we are determining if there is a session (initial app load / auth change). */
+  isAuthLoading: boolean;
+  /** True while fetching profile + roles for the current user. */
+  isUserDataLoading: boolean;
   isApprovedFarmer: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, fullName: string, role: UserRole) => Promise<{ error: Error | null }>;
+  signUp: (
+    email: string,
+    password: string,
+    fullName: string,
+    role: UserRole
+  ) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   hasRole: (role: UserRole) => boolean;
 }
@@ -23,7 +31,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [roles, setRoles] = useState<UserRole[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isUserDataLoading, setIsUserDataLoading] = useState(false);
 
   // Prevent duplicate profile/role fetches on initial load (getSession + INITIAL_SESSION)
   const userDataPromiseRef = useRef<Promise<void> | null>(null);
@@ -49,14 +58,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const ensureUserData = useCallback((userId: string) => {
     if (userDataPromiseRef.current) return userDataPromiseRef.current;
 
-    setIsLoading(true);
+    setIsUserDataLoading(true);
     userDataPromiseRef.current = fetchUserData(userId)
       .catch((error) => {
         console.error('Error fetching user data:', error);
       })
       .finally(() => {
         userDataPromiseRef.current = null;
-        setIsLoading(false);
+        setIsUserDataLoading(false);
       });
 
     return userDataPromiseRef.current;
@@ -73,6 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setSession(session);
       setUser(session?.user ?? null);
+      setIsAuthLoading(false);
 
       if (session?.user) {
         await ensureUserData(session.user.id);
@@ -80,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         userDataPromiseRef.current = null;
         setProfile(null);
         setRoles([]);
-        setIsLoading(false);
+        setIsUserDataLoading(false);
       }
     });
 
@@ -90,11 +100,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setSession(session);
       setUser(session?.user ?? null);
+      setIsAuthLoading(false);
 
       if (session?.user) {
         void ensureUserData(session.user.id);
       } else {
-        setIsLoading(false);
+        setIsUserDataLoading(false);
       }
     });
 
@@ -151,6 +162,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
     setProfile(null);
     setRoles([]);
+    setIsAuthLoading(false);
+    setIsUserDataLoading(false);
   }
 
   function hasRole(role: UserRole) {
@@ -167,7 +180,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         session,
         profile,
         roles,
-        isLoading,
+        isAuthLoading,
+        isUserDataLoading,
         isApprovedFarmer,
         signIn,
         signUp,

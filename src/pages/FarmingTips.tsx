@@ -24,7 +24,7 @@ interface ChatMessage {
 }
 
 const FarmingTips = () => {
-  const { user, profile, isLoading } = useAuth();
+  const { user, profile, isAuthLoading } = useAuth();
   const navigate = useNavigate();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -33,10 +33,10 @@ const FarmingTips = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!isLoading && !user) {
+    if (!isAuthLoading && !user) {
       navigate("/login");
     }
-  }, [user, isLoading, navigate]);
+  }, [user, isAuthLoading, navigate]);
 
   useEffect(() => {
     if (!user) return;
@@ -139,7 +139,7 @@ const FarmingTips = () => {
       .slice(0, 2);
   };
 
-  if (isLoading) {
+  if (isAuthLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>

@@ -19,9 +19,9 @@ import {
 } from 'lucide-react';
 
 export default function Dashboard() {
-  const { profile, roles, isLoading } = useAuth();
+  const { profile, roles, isAuthLoading, isUserDataLoading } = useAuth();
 
-  if (isLoading) {
+  if (isAuthLoading || isUserDataLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />

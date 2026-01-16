@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 
 export default function CropDiagnosis() {
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isAuthLoading: authLoading } = useAuth();
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
