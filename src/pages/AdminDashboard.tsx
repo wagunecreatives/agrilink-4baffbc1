@@ -53,7 +53,7 @@ interface UserWithRoles {
 }
 
 export default function AdminDashboard() {
-  const { hasRole, isAuthLoading, isUserDataLoading, user } = useAuth();
+  const { hasRole, isAuthLoading, isUserDataLoading, user, roles } = useAuth();
   const [pendingFarmers, setPendingFarmers] = useState<PendingFarmer[]>([]);
   const [users, setUsers] = useState<UserWithRoles[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -65,14 +65,17 @@ export default function AdminDashboard() {
 
   const isAdmin = hasRole('admin');
 
+  // Wait until auth is fully loaded before fetching admin data
+  const isFullyLoaded = !isAuthLoading && !isUserDataLoading;
+
   useEffect(() => {
-    if (!isAuthLoading && !isUserDataLoading && isAdmin) {
+    if (isFullyLoaded && isAdmin) {
       setIsLoading(true);
       Promise.all([fetchPendingFarmers(), fetchUsers()]).finally(() => {
         setIsLoading(false);
       });
     }
-  }, [isAuthLoading, isUserDataLoading, isAdmin]);
+  }, [isFullyLoaded, isAdmin]);
 
   async function fetchPendingFarmers() {
     try {
@@ -207,7 +210,8 @@ export default function AdminDashboard() {
     }
   }
 
-  if (isAuthLoading || isUserDataLoading) {
+  // Show loading until we have both auth state AND user roles
+  if (!isFullyLoaded) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
