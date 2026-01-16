@@ -1,4 +1,4 @@
-export type UserRole = 'farmer' | 'customer' | 'admin';
+export type UserRole = 'farmer' | 'customer' | 'admin' | 'security';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 
 export interface Profile {

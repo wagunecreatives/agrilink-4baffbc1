@@ -14,6 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_model_config: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          model_id: string
+          model_name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          model_id: string
+          model_name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          model_id?: string
+          model_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      diagnosis_logs: {
+        Row: {
+          confidence_level: string | null
+          created_at: string
+          diagnosis_result: string | null
+          id: string
+          image_url: string | null
+          model_used: string
+          status: string | null
+          user_id: string | null
+        }
+        Insert: {
+          confidence_level?: string | null
+          created_at?: string
+          diagnosis_result?: string | null
+          id?: string
+          image_url?: string | null
+          model_used: string
+          status?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          confidence_level?: string | null
+          created_at?: string
+          diagnosis_result?: string | null
+          id?: string
+          image_url?: string | null
+          model_used?: string
+          status?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       direct_conversations: {
         Row: {
           created_at: string
@@ -237,7 +300,7 @@ export type Database = {
       is_approved_farmer: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
-      app_role: "farmer" | "customer" | "admin"
+      app_role: "farmer" | "customer" | "admin" | "security"
       approval_status: "pending" | "approved" | "rejected"
     }
     CompositeTypes: {
@@ -366,7 +429,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["farmer", "customer", "admin"],
+      app_role: ["farmer", "customer", "admin", "security"],
       approval_status: ["pending", "approved", "rejected"],
     },
   },
