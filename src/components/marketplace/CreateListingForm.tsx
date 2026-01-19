@@ -57,12 +57,11 @@ const units = ['kg', 'lb', 'ton', 'piece', 'dozen', 'crate', 'bushel', 'bag'];
 
 export function CreateListingForm() {
   const navigate = useNavigate();
-  const { user, isApprovedFarmer, profile, roles } = useAuth();
+  const { user, roles } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [images, setImages] = useState<string[]>([]);
 
   const isFarmer = roles.includes('farmer');
-  const isPendingApproval = isFarmer && profile?.approval_status === 'pending';
 
   const form = useForm<ListingFormData>({
     resolver: zodResolver(listingSchema),
@@ -83,8 +82,8 @@ export function CreateListingForm() {
       return;
     }
 
-    if (!isApprovedFarmer) {
-      toast.error('Your farmer account must be approved to create listings');
+    if (!isFarmer) {
+      toast.error('Only farmers can create listings');
       return;
     }
 
@@ -115,7 +114,7 @@ export function CreateListingForm() {
     }
   };
 
-  if (isPendingApproval) {
+  if (!isFarmer) {
     return (
       <Card className="max-w-2xl mx-auto shadow-soft">
         <CardHeader>
@@ -125,32 +124,7 @@ export function CreateListingForm() {
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              Your farmer account is pending admin approval. You'll be able to create listings once approved.
-            </AlertDescription>
-          </Alert>
-          <Button
-            variant="outline"
-            className="mt-4 w-full"
-            onClick={() => navigate('/marketplace')}
-          >
-            Back to Marketplace
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!isApprovedFarmer) {
-    return (
-      <Card className="max-w-2xl mx-auto shadow-soft">
-        <CardHeader>
-          <CardTitle className="text-2xl font-display">Create New Listing</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Only approved farmers can create listings. Please sign up as a farmer and wait for admin approval.
+              Only farmers can create listings. Please sign up as a farmer to list your products.
             </AlertDescription>
           </Alert>
           <Button
