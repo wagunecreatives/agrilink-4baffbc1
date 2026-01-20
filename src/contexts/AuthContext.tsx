@@ -77,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for auth changes (set up BEFORE getSession)
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!isMounted) return;
 
       setSession(session);
@@ -85,7 +85,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsAuthLoading(false);
 
       if (session?.user) {
-        await ensureUserData(session.user.id);
+        // Use setTimeout to defer Supabase calls and prevent deadlock
+        setTimeout(() => {
+          if (isMounted) {
+            ensureUserData(session.user.id);
+          }
+        }, 0);
       } else {
         userDataPromiseRef.current = null;
         setProfile(null);
