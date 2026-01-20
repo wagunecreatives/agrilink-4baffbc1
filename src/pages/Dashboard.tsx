@@ -21,7 +21,7 @@ import {
 export default function Dashboard() {
   const { profile, roles, isAuthLoading, isUserDataLoading } = useAuth();
 
-  if (isAuthLoading || isUserDataLoading) {
+  if (isAuthLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -70,6 +70,12 @@ export default function Dashboard() {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              {isUserDataLoading && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Loading profile…</span>
+                </div>
+              )}
               {roles.map((role) => (
                 <Badge key={role} variant="secondary" className="capitalize">
                   {role}

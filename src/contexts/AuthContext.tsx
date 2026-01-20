@@ -59,7 +59,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (userDataPromiseRef.current) return userDataPromiseRef.current;
 
     setIsUserDataLoading(true);
-    userDataPromiseRef.current = fetchUserData(userId)
+
+    const timeoutMs = 8000;
+    const withTimeout = Promise.race([
+      fetchUserData(userId),
+      new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error('User data fetch timed out')), timeoutMs)
+      ),
+    ]);
+
+    userDataPromiseRef.current = withTimeout
       .catch((error) => {
         console.error('Error fetching user data:', error);
       })
