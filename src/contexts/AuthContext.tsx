@@ -18,7 +18,9 @@ interface AuthContextType {
     email: string,
     password: string,
     fullName: string,
-    role: UserRole
+    role: UserRole,
+    phone?: string,
+    location?: string
   ) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   hasRole: (role: UserRole) => boolean;
@@ -142,7 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error };
   }
 
-  async function signUp(email: string, password: string, fullName: string, role: UserRole) {
+  async function signUp(email: string, password: string, fullName: string, role: UserRole, phone?: string, location?: string) {
     const normalizedEmail = email.trim().toLowerCase();
 
     const { data, error } = await supabase.auth.signUp({
@@ -153,6 +155,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         data: {
           full_name: fullName,
           role,
+          phone: phone || null,
+          location: location || null,
         },
       },
     });
