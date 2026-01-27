@@ -7,13 +7,15 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Leaf, Mail, Lock, User, Tractor, ShoppingCart } from 'lucide-react';
+import { Loader2, Leaf, Mail, Lock, User, Tractor, ShoppingCart, Phone, MapPin } from 'lucide-react';
 import { UserRole } from '@/types/database';
 
 export function SignupForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [location, setLocation] = useState('');
   const [role, setRole] = useState<UserRole>('farmer');
   const [isLoading, setIsLoading] = useState(false);
   const { signUp } = useAuth();
@@ -24,7 +26,7 @@ export function SignupForm() {
     e.preventDefault();
     setIsLoading(true);
 
-    const { error } = await signUp(email, password, fullName, role);
+    const { error } = await signUp(email, password, fullName, role, phone, location);
 
     if (error) {
       toast({
@@ -102,6 +104,34 @@ export function SignupForm() {
                   className="pl-10"
                   minLength={6}
                   required
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone Number</Label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="phone"
+                  type="tel"
+                  placeholder="+254 700 000 000"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="location">Location</Label>
+              <div className="relative">
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="location"
+                  type="text"
+                  placeholder="Nairobi, Kenya"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  className="pl-10"
                 />
               </div>
             </div>
