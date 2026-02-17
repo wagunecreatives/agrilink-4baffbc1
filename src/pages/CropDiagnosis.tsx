@@ -26,6 +26,7 @@ export default function CropDiagnosis() {
   const [diagnosis, setDiagnosis] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  /** Handle image selection */
   const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -44,22 +45,24 @@ export default function CropDiagnosis() {
     setDiagnosis(null);
 
     const reader = new FileReader();
-    reader.onload = (e) => {
-      setSelectedImage(e.target?.result as string);
-    };
+    reader.onload = (e) => setSelectedImage(e.target?.result as string);
     reader.readAsDataURL(file);
   };
 
+  /** Clear selected image */
   const clearImage = () => {
     setSelectedImage(null);
     setImageFile(null);
     setDiagnosis(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  /** Analyze crop with JWT authorization */
   const analyzeCrop = async () => {
+    if (!user) {
+      toast.error("You must be logged in to analyze crops");
+      return;
+    }
     if (!selectedImage) {
       toast.error("Please select an image first");
       return;
@@ -69,34 +72,46 @@ export default function CropDiagnosis() {
     setDiagnosis(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke("analyze-crop", {
-        body: { imageBase64: selectedImage },
+      // ✅ Get JWT for the current user
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) throw new Error("Failed to retrieve session. Please log in again.");
+      const jwt = session.access_token;
+      if (!jwt) throw new Error("No valid JWT found. Please log in again.");
+
+      // ✅ Use NEXT_PUBLIC_SUPABASE_URL directly (no process.env at runtime)
+      const supabaseUrl = String(process.env.NEXT_PUBLIC_SUPABASE_URL || ""); 
+      if (!supabaseUrl) throw new Error("Supabase URL not set. Make sure NEXT_PUBLIC_SUPABASE_URL is in .env.local");
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/analyze-crop`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${jwt}`,
+        },
+        body: JSON.stringify({ imageBase64: selectedImage }),
       });
 
-      if (error) {
-        throw error;
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server responded with ${response.status}: ${errorText}`);
       }
 
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      const result = await response.json();
+      if (result.error) throw new Error(result.error);
 
-      setDiagnosis(data.diagnosis);
+      setDiagnosis(result.diagnosis);
       toast.success("Analysis complete!");
     } catch (error) {
       console.error("Error analyzing crop:", error);
-      const message = error instanceof Error ? error.message : "Failed to analyze crop image";
-      toast.error(message);
+      toast.error(error instanceof Error ? error.message : "Failed to analyze crop image");
     } finally {
       setAnalyzing(false);
     }
   };
 
+  /** Format AI diagnosis for display */
   const formatDiagnosis = (text: string) => {
-    // Convert markdown-style formatting to styled sections
-    const lines = text.split("\n");
-    return lines.map((line, index) => {
-      // Headers (bold text with **)
+    return text.split("\n").map((line, index) => {
       if (line.startsWith("**") && line.endsWith("**")) {
         return (
           <h3 key={index} className="font-semibold text-lg mt-4 mb-2 text-primary">
@@ -104,16 +119,13 @@ export default function CropDiagnosis() {
           </h3>
         );
       }
-      // Numbered headers
       if (/^\d+\.\s+\*\*/.test(line)) {
-        const cleanLine = line.replace(/\*\*/g, "");
         return (
           <h3 key={index} className="font-semibold text-base mt-4 mb-2 text-foreground">
-            {cleanLine}
+            {line.replace(/\*\*/g, "")}
           </h3>
         );
       }
-      // Bullet points
       if (line.startsWith("- ") || line.startsWith("• ")) {
         return (
           <li key={index} className="ml-4 text-muted-foreground">
@@ -121,7 +133,6 @@ export default function CropDiagnosis() {
           </li>
         );
       }
-      // Regular text
       if (line.trim()) {
         return (
           <p key={index} className="text-muted-foreground mb-2">
@@ -144,7 +155,6 @@ export default function CropDiagnosis() {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
-
       <main className="flex-1 container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
           {/* Header */}
@@ -154,8 +164,7 @@ export default function CropDiagnosis() {
               <h1 className="text-3xl font-bold">AI Crop Disease Diagnosis</h1>
             </div>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              Upload a photo of your crop and our AI will analyze it for diseases, pests,
-              or nutrient deficiencies and provide treatment recommendations.
+              Upload a photo of your crop and our AI will analyze it for diseases, pests, or nutrient deficiencies.
             </p>
           </div>
 
@@ -167,9 +176,7 @@ export default function CropDiagnosis() {
                   <Camera className="h-5 w-5" />
                   Upload Crop Image
                 </CardTitle>
-                <CardDescription>
-                  Take a clear photo of the affected plant leaves or stems
-                </CardDescription>
+                <CardDescription>Take a clear photo of the affected plant leaves or stems</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <input
@@ -186,45 +193,24 @@ export default function CropDiagnosis() {
                     className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
                   >
                     <ImageIcon className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-                    <p className="text-muted-foreground mb-2">
-                      Click to upload or drag and drop
-                    </p>
-                    <p className="text-sm text-muted-foreground/70">
-                      PNG, JPG up to 10MB
-                    </p>
+                    <p className="text-muted-foreground mb-2">Click to upload or drag and drop</p>
+                    <p className="text-sm text-muted-foreground/70">PNG, JPG up to 10MB</p>
                   </div>
                 ) : (
                   <div className="relative">
-                    <img
-                      src={selectedImage}
-                      alt="Selected crop"
-                      className="w-full h-64 object-cover rounded-lg"
-                    />
-                    <Button
-                      variant="destructive"
-                      size="icon"
-                      className="absolute top-2 right-2"
-                      onClick={clearImage}
-                    >
+                    <img src={selectedImage} alt="Selected crop" className="w-full h-64 object-cover rounded-lg" />
+                    <Button variant="destructive" size="icon" className="absolute top-2 right-2" onClick={clearImage}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 )}
 
                 <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
+                  <Button variant="outline" className="flex-1" onClick={() => fileInputRef.current?.click()}>
                     <Upload className="h-4 w-4 mr-2" />
                     {selectedImage ? "Change Image" : "Select Image"}
                   </Button>
-                  <Button
-                    className="flex-1"
-                    onClick={analyzeCrop}
-                    disabled={!selectedImage || analyzing}
-                  >
+                  <Button className="flex-1" onClick={analyzeCrop} disabled={!selectedImage || analyzing}>
                     {analyzing ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -294,21 +280,16 @@ export default function CropDiagnosis() {
                   <div className="flex flex-col items-center justify-center py-12">
                     <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
                     <p className="text-muted-foreground">Analyzing your crop image...</p>
-                    <p className="text-sm text-muted-foreground/70 mt-1">
-                      This may take a few seconds
-                    </p>
+                    <p className="text-sm text-muted-foreground/70 mt-1">This may take a few seconds</p>
                   </div>
                 ) : diagnosis ? (
-                  <div className="prose prose-sm max-w-none dark:prose-invert">
-                    {formatDiagnosis(diagnosis)}
-                  </div>
+                  <div className="prose prose-sm max-w-none dark:prose-invert">{formatDiagnosis(diagnosis)}</div>
                 ) : null}
               </CardContent>
             </Card>
           )}
         </div>
       </main>
-
       <Footer />
     </div>
   );

@@ -37,7 +37,7 @@ const App = () => (
             <Route
               path="/marketplace/new"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute requiredRole="farmer">
                   <CreateListing />
                 </ProtectedRoute>
               }

@@ -31,13 +31,13 @@ import { Loader2, AlertCircle } from 'lucide-react';
 import { ImageUpload } from './ImageUpload';
 
 const listingSchema = z.object({
-  title: z.string().min(5, 'Title must be at least 5 characters').max(100),
+  title: z.string().min(5).max(100),
   description: z.string().max(1000).optional(),
-  crop_type: z.string().min(1, 'Please select a crop type'),
-  quantity: z.coerce.number().positive('Quantity must be positive'),
-  unit: z.string().min(1, 'Please select a unit'),
-  price: z.coerce.number().positive('Price must be positive'),
-  location: z.string().min(2, 'Please enter a location'),
+  crop_type: z.string().min(1),
+  quantity: z.coerce.number().positive(),
+  unit: z.string().min(1),
+  price: z.coerce.number().positive(),
+  location: z.string().min(2),
 });
 
 type ListingFormData = z.infer<typeof listingSchema>;
@@ -57,11 +57,9 @@ const units = ['kg', 'lb', 'ton', 'piece', 'dozen', 'crate', 'bushel', 'bag'];
 
 export function CreateListingForm() {
   const navigate = useNavigate();
-  const { user, roles } = useAuth();
+  const { user, isApprovedFarmer } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [images, setImages] = useState<string[]>([]);
-
-  const isFarmer = roles.includes('farmer');
 
   const form = useForm<ListingFormData>({
     resolver: zodResolver(listingSchema),
@@ -78,30 +76,32 @@ export function CreateListingForm() {
 
   const onSubmit = async (data: ListingFormData) => {
     if (!user) {
-      toast.error('You must be logged in to create a listing');
+      toast.error('You must be logged in');
       return;
     }
 
-    if (!isFarmer) {
-      toast.error('Only farmers can create listings');
+    if (!isApprovedFarmer) {
+      toast.error('Only approved farmers can create listings');
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      const { error } = await supabase.from('market_listings').insert({
-        seller_id: user.id,
-        title: data.title,
-        description: data.description,
-        crop_type: data.crop_type,
-        quantity: data.quantity,
-        unit: data.unit,
-        price: data.price,
-        location: data.location,
-        images: images,
-        status: 'active',
-      });
+      const { error } = await supabase
+        .from('market_listings')
+        .insert({
+          seller_id: user.id,
+          title: data.title,
+          description: data.description,
+          crop_type: data.crop_type,
+          quantity: data.quantity,
+          unit: data.unit,
+          price: data.price,
+          location: data.location,
+          images: images,
+          status: 'active',
+        });
 
       if (error) throw error;
 
@@ -114,19 +114,20 @@ export function CreateListingForm() {
     }
   };
 
-  if (!isFarmer) {
+  if (!isApprovedFarmer) {
     return (
-      <Card className="max-w-2xl mx-auto shadow-soft">
+      <Card className="max-w-2xl mx-auto">
         <CardHeader>
-          <CardTitle className="text-2xl font-display">Create New Listing</CardTitle>
+          <CardTitle>Create New Listing</CardTitle>
         </CardHeader>
         <CardContent>
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              Only farmers can create listings. Please sign up as a farmer to list your products.
+              Only approved farmers can create listings.
             </AlertDescription>
           </Alert>
+
           <Button
             variant="outline"
             className="mt-4 w-full"
@@ -140,13 +141,15 @@ export function CreateListingForm() {
   }
 
   return (
-    <Card className="max-w-2xl mx-auto shadow-soft">
+    <Card className="max-w-2xl mx-auto">
       <CardHeader>
-        <CardTitle className="text-2xl font-display">Create New Listing</CardTitle>
+        <CardTitle>Create New Listing</CardTitle>
       </CardHeader>
+
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            
             <FormField
               control={form.control}
               name="title"
@@ -154,7 +157,7 @@ export function CreateListingForm() {
                 <FormItem>
                   <FormLabel>Product Title</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Fresh Organic Tomatoes" {...field} />
+                    <Input placeholder="Fresh Organic Tomatoes" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -168,14 +171,10 @@ export function CreateListingForm() {
                 <FormItem>
                   <FormLabel>Description</FormLabel>
                   <FormControl>
-                    <Textarea
-                      placeholder="Describe your product, growing conditions, quality..."
-                      className="min-h-24"
-                      {...field}
-                    />
+                    <Textarea className="min-h-24" {...field} />
                   </FormControl>
                   <FormDescription>
-                    Help buyers understand what makes your produce special
+                    Describe quality and growing conditions
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -189,7 +188,7 @@ export function CreateListingForm() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Crop Type</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select type" />
@@ -215,7 +214,7 @@ export function CreateListingForm() {
                   <FormItem>
                     <FormLabel>Location</FormLabel>
                     <FormControl>
-                      <Input placeholder="City, State" {...field} />
+                      <Input placeholder="City, Country" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -231,7 +230,7 @@ export function CreateListingForm() {
                   <FormItem>
                     <FormLabel>Quantity</FormLabel>
                     <FormControl>
-                      <Input type="number" placeholder="0" {...field} />
+                      <Input type="number" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -244,10 +243,10 @@ export function CreateListingForm() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Unit</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select unit" />
+                          <SelectValue />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -268,9 +267,9 @@ export function CreateListingForm() {
                 name="price"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Price per Unit ($)</FormLabel>
+                    <FormLabel>Price per Unit</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                      <Input type="number" step="0.01" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -278,10 +277,11 @@ export function CreateListingForm() {
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Product Images</label>
-              <ImageUpload images={images} onImagesChange={setImages} maxImages={5} />
-            </div>
+            <ImageUpload
+              images={images}
+              onImagesChange={setImages}
+              maxImages={5}
+            />
 
             <div className="flex gap-3 pt-4">
               <Button
@@ -292,11 +292,19 @@ export function CreateListingForm() {
               >
                 Cancel
               </Button>
-              <Button type="submit" className="flex-1" disabled={isSubmitting}>
-                {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+
+              <Button
+                type="submit"
+                className="flex-1"
+                disabled={isSubmitting}
+              >
+                {isSubmitting && (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                )}
                 Create Listing
               </Button>
             </div>
+
           </form>
         </Form>
       </CardContent>

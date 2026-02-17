@@ -9,14 +9,19 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, requiredRoles }: ProtectedRouteProps) {
-  const { user, roles, isAuthLoading, isUserDataLoading } = useAuth();
-  const location = useLocation();
+  const {
+    user,
+    roles,
+    isAuthLoading,
+    isUserDataLoading,
+    isApprovedFarmer,
+  } = useAuth();
 
+  const location = useLocation();
   const needsRoleCheck = (requiredRoles?.length ?? 0) > 0;
 
-  // Wait for auth loading AND user data loading when role check is needed
-  // This prevents premature redirects before roles are fetched
-  const isLoading = isAuthLoading || (needsRoleCheck && isUserDataLoading);
+  const isLoading =
+    isAuthLoading || (needsRoleCheck && isUserDataLoading);
 
   if (isLoading) {
     return (
@@ -26,13 +31,26 @@ export function ProtectedRoute({ children, requiredRoles }: ProtectedRouteProps)
     );
   }
 
+  // Not logged in
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // Role check
   if (needsRoleCheck) {
-    const hasRequiredRole = requiredRoles!.some((role) => roles.includes(role));
+    const hasRequiredRole = requiredRoles!.some((role) =>
+      roles.includes(role)
+    );
+
     if (!hasRequiredRole) {
+      return <Navigate to="/dashboard" replace />;
+    }
+
+    // Extra protection for farmers (must be approved)
+    if (
+      requiredRoles!.includes('farmer') &&
+      !isApprovedFarmer
+    ) {
       return <Navigate to="/dashboard" replace />;
     }
   }
