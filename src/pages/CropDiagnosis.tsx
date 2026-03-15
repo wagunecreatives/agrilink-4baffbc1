@@ -103,10 +103,19 @@ export default function CropDiagnosis() {
 
     setIsAnalyzing(true);
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
       const { data, error } = await supabase.functions.invoke("analyze-crop", {
         body: { imageBase64: imageDataUrl.split(",")[1] },
       });
-      if (error) throw new Error(error.message || "Analysis request failed.");
+      if (error) {
+        const isAnonymousAuthBlock =
+          !sessionData.session && error.message.includes("non-2xx");
+        throw new Error(
+          isAnonymousAuthBlock
+            ? "The diagnosis service is currently blocking anonymous requests. Redeploy the Edge Function with JWT verification disabled for public use, or sign in before retrying."
+            : error.message || "Analysis request failed.",
+        );
+      }
 
       const run: DiagnosisRun = {
         id: crypto.randomUUID(),

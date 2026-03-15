@@ -327,8 +327,8 @@ Rules:
 
     const modelsToTry = [
       "gemini-2.5-flash",
-      "gemini-1.5-flash",
-      "gemini-pro-vision",
+      "gemini-2.5-flash-lite",
+      "gemini-2.5-pro",
     ];
 
     let lastError: unknown = null;
