@@ -17,7 +17,6 @@ Agrilink AI is a Vite + React + TypeScript application for agricultural workflow
 - Supabase
 - TanStack Query
 
-## Getting Started
 
 ### Prerequisites
 
