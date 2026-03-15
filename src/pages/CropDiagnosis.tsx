@@ -1,488 +1,398 @@
-import { useState, useRef } from "react";
-import { Navbar } from "@/components/layout/Navbar";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, CheckCircle2, Copy, Download, Loader2, Microscope, RefreshCcw, ScanSearch, Sparkles, Upload } from "lucide-react";
 import { Footer } from "@/components/layout/Footer";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Navbar } from "@/components/layout/Navbar";
+import { ScrollReveal } from "@/components/ui/scroll-reveal";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { toast } from "sonner";
-import {
-  Upload,
-  Camera,
-  Loader2,
-  Leaf,
-  Lightbulb,
-  ImageIcon,
-  Trash2,
-  CheckCircle,
-  Syringe,
-  FlaskConical,
-  Sprout,
-} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { buildDiagnosisReport, DiagnosisRun, normalizeDiagnosis } from "@/lib/diagnosis";
 
-type DiagnosisRecord = Record<string, unknown>;
+const STORAGE_KEY = "agrilink-diagnosis-history";
 
-type NormalizedDiagnosis = {
-  crop: string;
-  disease: string;
-  scientific_name: string;
-  confidence: number;
-  type: string;
-  severity: string;
-  key_indicators: string[];
-  analysis_details: string;
-  treatment: string;
-  prevention: string[];
-};
+type ImageMeta = DiagnosisRun["imageMeta"];
 
-const isRecord = (value: unknown): value is DiagnosisRecord =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+const labelize = (value: string) =>
+  value
+    .split(/[_-\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 
-const parseJsonLike = (value: unknown): unknown => {
-  if (typeof value !== "string") return value;
+const measureQuality = (fileSizeKb: number, width: number, height: number) =>
+  Math.max(20, Math.min(100, Math.round((width * height) / 140000 + Math.min(fileSizeKb / 30, 20) + 18)));
 
-  const trimmed = value.trim();
-  if (!trimmed) return value;
+const listWithFallback = (items: string[], fallback: string) => (items.length ? items : [fallback]);
 
-  const withoutFence = trimmed.replace(/^```(?:json)?\s*|\s*```$/g, "");
-  const candidate = withoutFence.trim();
+const readAsDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Image reading failed."));
+    reader.readAsDataURL(file);
+  });
 
-  if (!candidate.startsWith("{") && !candidate.startsWith("[")) {
-    return value;
-  }
-
-  try {
-    return JSON.parse(candidate);
-  } catch {
-    return value;
-  }
-};
-
-const normalizeStringList = (value: unknown): string[] => {
-  const parsedValue = parseJsonLike(value);
-
-  if (Array.isArray(parsedValue)) {
-    return parsedValue
-      .map((item) => String(item).trim())
-      .filter(Boolean);
-  }
-
-  if (typeof parsedValue === "string") {
-    return parsedValue
-      .split(/\r?\n|,\s*/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }
-
-  return [];
-};
-
-const normalizeText = (value: unknown, fallback: string): string => {
-  const parsedValue = parseJsonLike(value);
-
-  if (typeof parsedValue === "string") {
-    const text = parsedValue.trim();
-    return text || fallback;
-  }
-
-  if (Array.isArray(parsedValue)) {
-    const text = parsedValue
-      .map((item) => String(item).trim())
-      .filter(Boolean)
-      .join("\n");
-    return text || fallback;
-  }
-
-  if (isRecord(parsedValue)) {
-    const preferredKeys = [
-      "analysis_details",
-      "details",
-      "summary",
-      "description",
-      "message",
-    ] as const;
-
-    for (const key of preferredKeys) {
-      const candidate = parsedValue[key];
-      if (typeof candidate === "string" && candidate.trim()) {
-        return candidate.trim();
-      }
-    }
-  }
-
-  return fallback;
-};
-
-const normalizeDiagnosis = (value: unknown): NormalizedDiagnosis => {
-  const parsedValue = parseJsonLike(value);
-  const diagnosis = isRecord(parsedValue) ? parsedValue : {};
-  const analysisPayload = parseJsonLike(diagnosis.analysis_details);
-  const parsedAnalysis = isRecord(analysisPayload) ? analysisPayload : null;
-  const merged = parsedAnalysis
-    ? {
-        ...parsedAnalysis,
-        ...diagnosis,
-      }
-    : diagnosis;
-
-  return {
-    crop: normalizeText(merged.crop, "Unknown"),
-    disease: normalizeText(merged.disease, "Unknown"),
-    scientific_name: normalizeText(merged.scientific_name, ""),
-    confidence:
-      typeof merged.confidence === "number"
-        ? merged.confidence
-        : Number(merged.confidence) || 0,
-    type: normalizeText(merged.type, "other"),
-    severity: normalizeText(merged.severity, "unknown"),
-    key_indicators: normalizeStringList(merged.key_indicators),
-    analysis_details: normalizeText(
-      parsedAnalysis?.analysis_details ?? merged.analysis_details,
-      "No detailed analysis available.",
-    ),
-    treatment: normalizeText(
-      merged.treatment,
-      "No treatment information provided.",
-    ),
-    prevention: normalizeStringList(merged.prevention),
-  };
-};
+const readMeta = (file: File, dataUrl: string) =>
+  new Promise<ImageMeta>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () =>
+      resolve({
+        fileSizeKb: Math.max(1, Math.round(file.size / 1024)),
+        width: image.width,
+        height: image.height,
+        orientation: image.width === image.height ? "square" : image.width > image.height ? "landscape" : "portrait",
+        qualityScore: measureQuality(Math.max(1, Math.round(file.size / 1024)), image.width, image.height),
+      });
+    image.onerror = () => reject(new Error("Image inspection failed."));
+    image.src = dataUrl;
+  });
 
 export default function CropDiagnosis() {
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [diagnosis, setDiagnosis] = useState<any | null>(null);
+  const { toast } = useToast();
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+  const [imageMeta, setImageMeta] = useState<ImageMeta>(null);
+  const [fieldNotes, setFieldNotes] = useState("");
+  const [history, setHistory] = useState<DiagnosisRun[]>([]);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as DiagnosisRun[];
+      if (Array.isArray(parsed)) {
+        setHistory(parsed);
+        setActiveRunId(parsed[0]?.id || null);
+      }
+    } catch {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }, []);
 
-  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-  const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+  }, [history]);
 
-  const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const activeRun = useMemo(() => history.find((item) => item.id === activeRunId) || history[0] || null, [activeRunId, history]);
 
-  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const onFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please upload a valid image file.");
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Image must be less than 5MB.");
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setSelectedImage(reader.result as string);
-      setDiagnosis(null);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const clearImage = () => {
-    setSelectedImage(null);
-    setDiagnosis(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  const analyzeCrop = async () => {
-    if (!selectedImage) return toast.error("Please upload an image first.");
-    if (!SUPABASE_URL || !SUPABASE_ANON)
-      return toast.error("Supabase variables missing.");
-
-    setAnalyzing(true);
-    setDiagnosis(null);
-
     try {
-      const base64 = selectedImage.split(",")[1];
-
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/analyze-crop`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${SUPABASE_ANON}`,
-          apikey: SUPABASE_ANON,
-        },
-        body: JSON.stringify({ imageBase64: base64 }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "AI analysis failed.");
-
-      // The edge function returns { diagnosis: ... }
-      const result = data.diagnosis ?? data;
-      setDiagnosis(result);
-      toast.success("Crop analysis completed!");
-    } catch (error: any) {
-      console.error("Analysis error:", error);
-      toast.error(error.message || "Analysis failed. Check console for details.");
-    } finally {
-      setAnalyzing(false);
+      const dataUrl = await readAsDataUrl(file);
+      setSelectedFile(file);
+      setImageDataUrl(dataUrl);
+      setImageMeta(await readMeta(file, dataUrl));
+    } catch (error) {
+      toast({ title: "Upload failed", description: error instanceof Error ? error.message : "Image upload failed.", variant: "destructive" });
     }
   };
 
-  const renderDiagnosis = (diag: any) => {
-    const normalizedDiagnosis = normalizeDiagnosis(diag);
-    const {
-      crop,
-      disease,
-      scientific_name,
-      confidence,
-      type,
-      severity,
-      key_indicators,
-      analysis_details,
-      treatment,
-      prevention,
-    } = normalizedDiagnosis;
+  const runAnalysis = async () => {
+    if (!imageDataUrl || !selectedFile) {
+      toast({ title: "No image selected", description: "Upload a crop image before running analysis.", variant: "destructive" });
+      return;
+    }
 
-    const confidenceLevel = confidence > 80 ? "high" : confidence > 50 ? "medium" : "low";
-    const confidenceVariant =
-      confidenceLevel === "high" ? "default" : confidenceLevel === "medium" ? "secondary" : "outline";
-    const severityVariant =
-      severity === "high" ? "destructive" : severity === "medium" ? "default" : "secondary";
+    setIsAnalyzing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("analyze-crop", {
+        body: { imageBase64: imageDataUrl.split(",")[1] },
+      });
+      if (error) throw new Error(error.message || "Analysis request failed.");
 
-    return (
-      <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-xl">
-              <Leaf className="h-5 w-5 text-green-600" />
-              Diagnosis Results: {crop} – {disease}
-              {scientific_name && (
-                <span className="text-sm font-normal text-muted-foreground">
-                  ({scientific_name})
-                </span>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-4 items-center">
-              <div>
-                <span className="text-sm text-muted-foreground">Detected Issue</span>
-                <p className="font-semibold">{disease}</p>
-              </div>
-              <Separator orientation="vertical" className="h-8" />
-              <div>
-                <span className="text-sm text-muted-foreground">Type</span>
-                <p className="font-semibold">{capitalise(type)}</p>
-              </div>
-              <Separator orientation="vertical" className="h-8" />
-              <div>
-                <span className="text-sm text-muted-foreground">Severity</span>
-                <Badge variant={severityVariant} className="ml-2">
-                  {capitalise(severity)}
-                </Badge>
-              </div>
-              <Separator orientation="vertical" className="h-8" />
-              <div>
-                <span className="text-sm text-muted-foreground">Confidence</span>
-                <Badge variant={confidenceVariant} className="ml-2">
-                  {confidence}% ({confidenceLevel})
-                </Badge>
-              </div>
-            </div>
+      const run: DiagnosisRun = {
+        id: crypto.randomUUID(),
+        createdAt: data?.generated_at || new Date().toISOString(),
+        imageName: selectedFile.name,
+        imageDataUrl,
+        imageMeta,
+        modelUsed: data?.model_used || "Unknown",
+        finishReason: data?.finish_reason || "unknown",
+        diagnosis: normalizeDiagnosis(data?.diagnosis ?? data),
+        notes: fieldNotes.trim(),
+      };
 
-            <Separator />
-
-            <div>
-              <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-                <FlaskConical className="h-4 w-4" /> Analysis Details
-              </h3>
-              <p className="text-muted-foreground whitespace-pre-line">{analysis_details}</p>
-              {key_indicators.length > 0 && (
-                <div className="mt-2">
-                  <span className="text-sm font-medium">Key indicators: </span>
-                  <span className="text-sm text-muted-foreground">
-                    {key_indicators.join(", ")}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-                <Syringe className="h-4 w-4" /> Treatment
-              </h3>
-              <p className="text-muted-foreground whitespace-pre-line">{treatment}</p>
-            </div>
-
-            {prevention.length > 0 && (
-              <div>
-                <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-                  <Sprout className="h-4 w-4" /> Prevention
-                </h3>
-                <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
-                  {prevention.map((item, idx) => (
-                    <li key={idx}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    );
+      setHistory((current) => [run, ...current].slice(0, 8));
+      setActiveRunId(run.id);
+      toast({ title: "Analysis ready", description: "The advanced diagnosis details have been updated." });
+    } catch (error) {
+      toast({ title: "Analysis failed", description: error instanceof Error ? error.message : "Analysis failed.", variant: "destructive" });
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
+
+  const exportReport = async (mode: "copy" | "download") => {
+    if (!activeRun) return;
+    const report = buildDiagnosisReport(activeRun);
+    if (mode === "copy") {
+      await navigator.clipboard.writeText(report);
+      toast({ title: "Copied", description: "Diagnosis report copied to clipboard." });
+      return;
+    }
+    const blob = new Blob([report], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${activeRun.diagnosis.crop}-${activeRun.id}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const diagnosis = activeRun?.diagnosis;
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen bg-background">
       <Navbar />
-      <main className="flex-1 container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-8">
-            <div className="flex items-center justify-center gap-2 mb-4">
-              <Leaf className="h-8 w-8 text-primary" />
-              <h1 className="text-3xl font-bold">AI Crop Disease Diagnosis</h1>
-            </div>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              Upload a crop photo and our AI will analyze it for diseases,
-              pests, or nutrient deficiencies.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Camera className="h-5 w-5" />
-                  Upload Crop Image
-                </CardTitle>
-                <CardDescription>
-                  Take a clear photo of the affected leaf or plant
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleImageSelect}
-                  accept="image/*"
-                  className="hidden"
-                />
-
-                {!selectedImage ? (
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition"
-                  >
-                    <ImageIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>Click to upload</p>
-                    <p className="text-sm opacity-70">PNG or JPG up to 5MB</p>
-                  </div>
-                ) : (
-                  <div className="relative">
-                    <img
-                      src={selectedImage}
-                      alt="Crop"
-                      className="w-full h-64 object-cover rounded-lg"
-                    />
-                    <Button
-                      variant="destructive"
-                      size="icon"
-                      className="absolute top-2 right-2"
-                      onClick={clearImage}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <Upload className="h-4 w-4 mr-2" />
-                    Select Image
-                  </Button>
-                  <Button
-                    className="flex-1"
-                    onClick={analyzeCrop}
-                    disabled={!selectedImage || analyzing}
-                  >
-                    {analyzing ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Analyzing...
-                      </>
-                    ) : (
-                      <>
-                        <Leaf className="h-4 w-4 mr-2" />
-                        Analyze Crop
-                      </>
-                    )}
-                  </Button>
+      <main className="pb-20">
+        <section className="hero-mesh surface-grid">
+          <div className="container py-12 md:py-16">
+            <ScrollReveal>
+              <div className="glass-strong rounded-[2rem] p-8 md:p-10">
+                <div className="flex flex-wrap gap-3">
+                  <Badge variant="secondary"><Sparkles className="mr-2 h-4 w-4" />Advanced diagnosis workspace</Badge>
+                  <Badge variant="outline"><ScanSearch className="mr-2 h-4 w-4" />Crop-specific recommendations</Badge>
                 </div>
-              </CardContent>
-            </Card>
+                <div className="mt-6 grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+                  <Card className="glass rounded-[1.75rem]">
+                    <CardHeader>
+                      <CardTitle>Upload crop image</CardTitle>
+                      <CardDescription>Use a clean image with visible symptoms, crop tissue detail, and stable lighting.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <label htmlFor="crop-upload" className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-[1.5rem] border border-dashed border-border/70 bg-white/75 p-10 text-center transition hover:border-primary/50">
+                        <div className="rounded-full bg-primary/10 p-4 text-primary"><Upload className="h-6 w-6" /></div>
+                        <div>
+                          <p className="font-semibold">Choose crop image</p>
+                          <p className="text-sm text-muted-foreground">{selectedFile?.name || "PNG, JPG, GIF, or WEBP"}</p>
+                        </div>
+                      </label>
+                      <input id="crop-upload" type="file" accept="image/*" className="hidden" onChange={onFileChange} />
+                      <div>
+                        <div className="mb-2 flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Estimated image quality</span>
+                          <span className="font-semibold">{imageMeta?.qualityScore ?? 0}/100</span>
+                        </div>
+                        <Progress value={imageMeta?.qualityScore ?? 0} className="h-3" />
+                      </div>
+                      <Textarea
+                        value={fieldNotes}
+                        onChange={(event) => setFieldNotes(event.target.value)}
+                        placeholder="Field notes: rainfall, spray history, spread pattern, irrigation changes, affected block..."
+                        className="min-h-[120px] border-border/70 bg-white/75"
+                      />
+                      <div className="flex flex-wrap gap-3">
+                        <Button className="gradient-hero text-primary-foreground" onClick={runAnalysis} disabled={isAnalyzing}>
+                          {isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Microscope className="mr-2 h-4 w-4" />}
+                          Run AI analysis
+                        </Button>
+                        <Button variant="outline" onClick={() => { setSelectedFile(null); setImageDataUrl(null); setImageMeta(null); }}>
+                          Reset
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Lightbulb className="h-5 w-5 text-yellow-500" />
-                  Tips for Best Results
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2 text-sm">
-                  <li className="flex items-start gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600 mt-0.5" />
-                    <span>Take close-up photos of affected areas</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600 mt-0.5" />
-                    <span>Ensure good lighting – natural daylight is best</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600 mt-0.5" />
-                    <span>Include both healthy and affected parts for comparison</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600 mt-0.5" />
-                    <span>Capture multiple angles if possible</span>
-                  </li>
-                  <li className="flex items-start gap-2 text-muted-foreground">
-                    <span className="text-red-500 font-bold">✕</span>
-                    <span>Avoid blurry or dark images</span>
-                  </li>
-                  <li className="flex items-start gap-2 text-muted-foreground">
-                    <span className="text-red-500 font-bold">✕</span>
-                    <span>Don’t use heavily filtered or edited photos</span>
-                  </li>
-                </ul>
-              </CardContent>
-            </Card>
+                  <Card className="glass-strong rounded-[1.75rem]">
+                    <CardHeader>
+                      <CardTitle>System upgrades now active</CardTitle>
+                      <CardDescription>Analysis depth, UI polish, and workflow clarity have all been increased in this module.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid gap-3 md:grid-cols-2">
+                      {[
+                        "Advanced crop-specific disease interpretation",
+                        "More detailed treatment and prevention content",
+                        "Split organic and conventional recommendations",
+                        "Persistent local diagnosis history",
+                        "Glass cards and layered surfaces",
+                        "Scroll-reveal motion system",
+                        "Exportable diagnosis report",
+                        "Upload quality scoring",
+                        "Richer field note capture",
+                        "Improved route and dashboard consistency",
+                      ].map((item) => (
+                        <div key={item} className="flex gap-3 rounded-2xl border border-border/70 bg-white/75 p-4">
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 text-success" />
+                          <span className="text-sm">{item}</span>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            </ScrollReveal>
           </div>
+        </section>
 
-          {(analyzing || diagnosis) && (
-            <Card className="mt-6">
-              <CardHeader>
-                <CardTitle>Diagnosis Results</CardTitle>
+        <section className="container -mt-8 grid gap-6 xl:grid-cols-[1.12fr_0.88fr]">
+          <ScrollReveal delayMs={100}>
+            <Card className="glass-strong rounded-[1.75rem]">
+              <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <CardTitle>Analysis details</CardTitle>
+                  <CardDescription>Better structured disease analysis, actions, and follow-up guidance.</CardDescription>
+                </div>
+                {activeRun ? (
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => exportReport("copy")}><Copy className="mr-2 h-4 w-4" />Copy</Button>
+                    <Button variant="outline" size="sm" onClick={() => exportReport("download")}><Download className="mr-2 h-4 w-4" />Export</Button>
+                  </div>
+                ) : null}
               </CardHeader>
               <CardContent>
-                {analyzing ? (
-                  <div className="flex flex-col items-center py-12">
-                    <Loader2 className="h-12 w-12 animate-spin mb-4" />
-                    <p>Analyzing your crop image...</p>
-                  </div>
+                {diagnosis ? (
+                  <Tabs defaultValue="overview" className="space-y-6">
+                    <TabsList className="grid w-full grid-cols-3">
+                      <TabsTrigger value="overview">Overview</TabsTrigger>
+                      <TabsTrigger value="recommendations">Recommendations</TabsTrigger>
+                      <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="overview" className="space-y-4">
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        {[
+                          { label: "Crop", value: diagnosis.crop },
+                          { label: "Diagnosis", value: diagnosis.disease },
+                          { label: "Confidence", value: `${diagnosis.confidence}%` },
+                          { label: "Severity", value: labelize(diagnosis.severity), danger: diagnosis.severity === "high" },
+                        ].map((item) => (
+                          <div key={item.label} className="rounded-[1.5rem] border border-border/70 bg-white/75 p-5">
+                            <p className="text-sm text-muted-foreground">{item.label}</p>
+                            <p className={`mt-2 text-xl font-bold ${item.danger ? "text-destructive" : ""}`}>{item.value}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
+                        <div className="rounded-[1.5rem] border border-border/70 bg-white/75 p-5">
+                          <h3 className="font-semibold">Analysis details</h3>
+                          <p className="mt-3 whitespace-pre-line text-sm leading-7 text-muted-foreground">{diagnosis.analysis_details}</p>
+                        </div>
+                        <div className="space-y-4">
+                          {[
+                            { label: "Spread risk", value: diagnosis.spread_risk },
+                            { label: "Recovery outlook", value: diagnosis.recovery_outlook },
+                            { label: "Review window", value: diagnosis.recommended_review_window },
+                            { label: "Nutrition notes", value: diagnosis.nutrition_notes },
+                          ].map((item) => (
+                            <div key={item.label} className="rounded-[1.5rem] border border-border/70 bg-white/75 p-5">
+                              <p className="text-sm text-muted-foreground">{item.label}</p>
+                              <p className="mt-2 text-sm leading-7">{item.value}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="recommendations" className="grid gap-4 lg:grid-cols-2">
+                      {[
+                        { title: "Urgent actions", items: listWithFallback(diagnosis.urgent_actions, "No urgent actions returned.") },
+                        { title: "Treatment", items: listWithFallback(diagnosis.treatment, "No treatment returned.") },
+                        { title: "Organic treatment", items: listWithFallback(diagnosis.organic_treatment, "No organic treatment returned.") },
+                        { title: "Conventional treatment", items: listWithFallback(diagnosis.conventional_treatment, "No conventional treatment returned.") },
+                        { title: "Prevention", items: listWithFallback(diagnosis.prevention, "No prevention returned.") },
+                      ].map((group) => (
+                        <div key={group.title} className="rounded-[1.5rem] border border-border/70 bg-white/75 p-5">
+                          <h3 className="font-semibold">{group.title}</h3>
+                          <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
+                            {group.items.map((item) => (
+                              <li key={item} className="flex gap-3">
+                                <CheckCircle2 className="mt-0.5 h-4 w-4 text-success" />
+                                <span>{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </TabsContent>
+                    <TabsContent value="monitoring" className="grid gap-4 lg:grid-cols-2">
+                      <div className="rounded-[1.5rem] border border-border/70 bg-white/75 p-5">
+                        <h3 className="font-semibold">Monitoring steps</h3>
+                        <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
+                          {listWithFallback(diagnosis.monitoring_steps, "No monitoring steps returned.").map((item) => (
+                            <li key={item} className="flex gap-3">
+                              <RefreshCcw className="mt-0.5 h-4 w-4 text-primary" />
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="rounded-[1.5rem] border border-border/70 bg-white/75 p-5">
+                        <h3 className="font-semibold">Contributing signals</h3>
+                        <div className="mt-4 space-y-4 text-sm text-muted-foreground">
+                          <div><span className="font-semibold text-foreground">Indicators:</span> {listWithFallback(diagnosis.key_indicators, "No indicators returned.").join(", ")}</div>
+                          <div><span className="font-semibold text-foreground">Likely causes:</span> {listWithFallback(diagnosis.likely_causes, "No causes returned.").join(", ")}</div>
+                          <div><span className="font-semibold text-foreground">Risk factors:</span> {listWithFallback(diagnosis.risk_factors, "No risk factors returned.").join(", ")}</div>
+                          <div><span className="font-semibold text-foreground">Field notes:</span> {activeRun?.notes || "No notes captured."}</div>
+                        </div>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
                 ) : (
-                  diagnosis && renderDiagnosis(diagnosis)
+                  <div className="rounded-[1.5rem] border border-dashed border-border/70 bg-white/70 p-10 text-center">
+                    <AlertTriangle className="mx-auto h-10 w-10 text-primary" />
+                    <h3 className="mt-4 text-xl font-semibold">No analysis yet</h3>
+                    <p className="mt-2 text-sm text-muted-foreground">Upload an image and run the upgraded diagnosis flow to populate this workspace.</p>
+                  </div>
                 )}
               </CardContent>
             </Card>
-          )}
-        </div>
+          </ScrollReveal>
+
+          <ScrollReveal delayMs={180}>
+            <div className="space-y-6">
+              <Card className="glass rounded-[1.75rem]">
+                <CardHeader>
+                  <CardTitle>Current upload</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="overflow-hidden rounded-[1.5rem] border border-border/70 bg-muted/40">
+                    {imageDataUrl ? <img src={imageDataUrl} alt="Uploaded crop" className="h-[260px] w-full object-cover" /> : <div className="flex h-[260px] items-center justify-center px-6 text-center text-muted-foreground">The crop preview appears here after upload.</div>}
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {[
+                      { label: "Resolution", value: imageMeta ? `${imageMeta.width} x ${imageMeta.height}` : "Not available" },
+                      { label: "Orientation", value: imageMeta ? labelize(imageMeta.orientation) : "Not available" },
+                      { label: "File size", value: imageMeta ? `${imageMeta.fileSizeKb} KB` : "Not available" },
+                      { label: "Quality score", value: imageMeta ? `${imageMeta.qualityScore}/100` : "Not available" },
+                    ].map((item) => (
+                      <div key={item.label} className="rounded-2xl border border-border/70 bg-white/75 p-4">
+                        <p className="text-sm text-muted-foreground">{item.label}</p>
+                        <p className="mt-1 font-semibold">{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="glass rounded-[1.75rem]">
+                <CardHeader>
+                  <CardTitle>Diagnosis history</CardTitle>
+                  <CardDescription>Recent runs are stored locally for quick comparison.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {history.length ? history.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setActiveRunId(item.id)}
+                      className={`w-full rounded-[1.5rem] border p-4 text-left transition ${activeRunId === item.id ? "border-primary bg-primary/5 shadow-soft" : "border-border/70 bg-white/75 hover:border-primary/40"}`}
+                    >
+                      <p className="font-semibold">{item.diagnosis.crop}</p>
+                      <p className="text-sm text-muted-foreground">{item.diagnosis.disease}</p>
+                      <p className="mt-2 text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleString()}</p>
+                    </button>
+                  )) : <div className="rounded-[1.5rem] border border-dashed border-border/70 bg-white/70 p-5 text-sm text-muted-foreground">No diagnosis history yet.</div>}
+                </CardContent>
+              </Card>
+            </div>
+          </ScrollReveal>
+        </section>
       </main>
       <Footer />
     </div>
