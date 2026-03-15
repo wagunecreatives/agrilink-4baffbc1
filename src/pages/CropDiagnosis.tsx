@@ -26,6 +26,134 @@ import {
   Sprout,
 } from "lucide-react";
 
+type DiagnosisRecord = Record<string, unknown>;
+
+type NormalizedDiagnosis = {
+  crop: string;
+  disease: string;
+  scientific_name: string;
+  confidence: number;
+  type: string;
+  severity: string;
+  key_indicators: string[];
+  analysis_details: string;
+  treatment: string;
+  prevention: string[];
+};
+
+const isRecord = (value: unknown): value is DiagnosisRecord =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const parseJsonLike = (value: unknown): unknown => {
+  if (typeof value !== "string") return value;
+
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+
+  const withoutFence = trimmed.replace(/^```(?:json)?\s*|\s*```$/g, "");
+  const candidate = withoutFence.trim();
+
+  if (!candidate.startsWith("{") && !candidate.startsWith("[")) {
+    return value;
+  }
+
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    return value;
+  }
+};
+
+const normalizeStringList = (value: unknown): string[] => {
+  const parsedValue = parseJsonLike(value);
+
+  if (Array.isArray(parsedValue)) {
+    return parsedValue
+      .map((item) => String(item).trim())
+      .filter(Boolean);
+  }
+
+  if (typeof parsedValue === "string") {
+    return parsedValue
+      .split(/\r?\n|,\s*/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+};
+
+const normalizeText = (value: unknown, fallback: string): string => {
+  const parsedValue = parseJsonLike(value);
+
+  if (typeof parsedValue === "string") {
+    const text = parsedValue.trim();
+    return text || fallback;
+  }
+
+  if (Array.isArray(parsedValue)) {
+    const text = parsedValue
+      .map((item) => String(item).trim())
+      .filter(Boolean)
+      .join("\n");
+    return text || fallback;
+  }
+
+  if (isRecord(parsedValue)) {
+    const preferredKeys = [
+      "analysis_details",
+      "details",
+      "summary",
+      "description",
+      "message",
+    ] as const;
+
+    for (const key of preferredKeys) {
+      const candidate = parsedValue[key];
+      if (typeof candidate === "string" && candidate.trim()) {
+        return candidate.trim();
+      }
+    }
+  }
+
+  return fallback;
+};
+
+const normalizeDiagnosis = (value: unknown): NormalizedDiagnosis => {
+  const parsedValue = parseJsonLike(value);
+  const diagnosis = isRecord(parsedValue) ? parsedValue : {};
+  const analysisPayload = parseJsonLike(diagnosis.analysis_details);
+  const parsedAnalysis = isRecord(analysisPayload) ? analysisPayload : null;
+  const merged = parsedAnalysis
+    ? {
+        ...parsedAnalysis,
+        ...diagnosis,
+      }
+    : diagnosis;
+
+  return {
+    crop: normalizeText(merged.crop, "Unknown"),
+    disease: normalizeText(merged.disease, "Unknown"),
+    scientific_name: normalizeText(merged.scientific_name, ""),
+    confidence:
+      typeof merged.confidence === "number"
+        ? merged.confidence
+        : Number(merged.confidence) || 0,
+    type: normalizeText(merged.type, "other"),
+    severity: normalizeText(merged.severity, "unknown"),
+    key_indicators: normalizeStringList(merged.key_indicators),
+    analysis_details: normalizeText(
+      parsedAnalysis?.analysis_details ?? merged.analysis_details,
+      "No detailed analysis available.",
+    ),
+    treatment: normalizeText(
+      merged.treatment,
+      "No treatment information provided.",
+    ),
+    prevention: normalizeStringList(merged.prevention),
+  };
+};
+
 export default function CropDiagnosis() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -103,28 +231,25 @@ export default function CropDiagnosis() {
   };
 
   const renderDiagnosis = (diag: any) => {
+    const normalizedDiagnosis = normalizeDiagnosis(diag);
     const {
-      crop = "Unknown",
-      disease = "Unknown",
-      scientific_name = "",
-      confidence = 0,
-      type = "other",
-      severity = "unknown",
-      key_indicators = [],
-      analysis_details = "No detailed analysis available.",
-      treatment = "No treatment information provided.",
-      prevention = "No prevention tips available.",
-    } = diag;
+      crop,
+      disease,
+      scientific_name,
+      confidence,
+      type,
+      severity,
+      key_indicators,
+      analysis_details,
+      treatment,
+      prevention,
+    } = normalizedDiagnosis;
 
     const confidenceLevel = confidence > 80 ? "high" : confidence > 50 ? "medium" : "low";
     const confidenceVariant =
       confidenceLevel === "high" ? "default" : confidenceLevel === "medium" ? "secondary" : "outline";
     const severityVariant =
       severity === "high" ? "destructive" : severity === "medium" ? "default" : "secondary";
-
-    const preventionList = typeof prevention === "string"
-      ? prevention.split('\n').filter((s: string) => s.trim())
-      : prevention;
 
     return (
       <div className="space-y-6">
@@ -173,7 +298,7 @@ export default function CropDiagnosis() {
               <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
                 <FlaskConical className="h-4 w-4" /> Analysis Details
               </h3>
-              <p className="text-muted-foreground">{analysis_details}</p>
+              <p className="text-muted-foreground whitespace-pre-line">{analysis_details}</p>
               {key_indicators.length > 0 && (
                 <div className="mt-2">
                   <span className="text-sm font-medium">Key indicators: </span>
@@ -191,20 +316,16 @@ export default function CropDiagnosis() {
               <p className="text-muted-foreground whitespace-pre-line">{treatment}</p>
             </div>
 
-            {preventionList.length > 0 && (
+            {prevention.length > 0 && (
               <div>
                 <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
                   <Sprout className="h-4 w-4" /> Prevention
                 </h3>
-                {Array.isArray(preventionList) ? (
-                  <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
-                    {preventionList.map((item: string, idx: number) => (
-                      <li key={idx}>{item}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-muted-foreground whitespace-pre-line">{preventionList}</p>
-                )}
+                <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
+                  {prevention.map((item, idx) => (
+                    <li key={idx}>{item}</li>
+                  ))}
+                </ul>
               </div>
             )}
           </CardContent>
