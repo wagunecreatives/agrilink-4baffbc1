@@ -17,7 +17,7 @@
 **AgrilinkAI** is a full-stack agricultural marketplace application built with:
 - **Frontend**: React 18 + TypeScript + Vite
 - **Styling**: Tailwind CSS + shadcn/ui components
-- **Backend**: Supabase (via Lovable Cloud)
+- **Backend**: Supabase 
 - **State Management**: TanStack React Query
 - **Routing**: React Router DOM v6
 

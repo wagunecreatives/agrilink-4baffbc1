@@ -57,32 +57,36 @@ export default function Dashboard() {
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
 
+      {/* 🎥 HERO VIDEO SECTION */}
+      <section className="relative h-[60vh] w-full overflow-hidden">
+        <video
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="absolute inset-0 w-full h-full object-cover"
+        >
+          <source src="/farm-bg.mp4" type="video/mp4" />
+        </video>
+
+        {/* Premium Gradient Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/40 to-black/80"></div>
+
+        {/* Hero Content */}
+        <div className="relative z-10 flex flex-col items-center justify-center h-full text-center text-white px-4">
+          <h1 className="text-4xl md:text-5xl font-bold mb-4">
+            Welcome back, {profile?.full_name?.split(' ')[0] || 'User'}!
+          </h1>
+
+          <p className="text-lg md:text-xl max-w-2xl">
+            Smart agriculture powered by AI. Monitor crops, diagnose diseases,
+            and connect directly to buyers.
+          </p>
+        </div>
+      </section>
+
       <main className="flex-1 py-8">
         <div className="container">
-          {/* Welcome Header */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-            <div>
-              <h1 className="text-3xl font-display font-bold">
-                Welcome back, {profile?.full_name?.split(' ')[0] || 'User'}!
-              </h1>
-              <p className="text-muted-foreground mt-1">
-                Here's what's happening with your farm today.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {isUserDataLoading && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Loading profile…</span>
-                </div>
-              )}
-              {roles.map((role) => (
-                <Badge key={role} variant="secondary" className="capitalize">
-                  {role}
-                </Badge>
-              ))}
-            </div>
-          </div>
 
           {/* Stats Grid */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

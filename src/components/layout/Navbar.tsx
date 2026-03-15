@@ -10,9 +10,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Leaf, Menu, User, LogOut, Settings, LayoutDashboard } from 'lucide-react';
+import { Leaf, User, LogOut, LayoutDashboard } from 'lucide-react';
 import { useState } from 'react';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 export function Navbar() {
   const { user, profile, signOut, isApprovedFarmer } = useAuth();
@@ -35,6 +34,7 @@ export function Navbar() {
     <nav className="sticky top-0 z-50 w-full border-b border-border/40 glass">
       <div className="container flex h-16 items-center justify-between">
 
+        {/* Logo */}
         <Link to="/" className="flex items-center gap-2">
           <div className="w-10 h-10 rounded-lg gradient-hero flex items-center justify-center">
             <Leaf className="w-5 h-5 text-primary-foreground" />
@@ -44,19 +44,18 @@ export function Navbar() {
           </span>
         </Link>
 
-        {/* Desktop Navigation */}
+        {/* Desktop Links */}
         <div className="hidden md:flex items-center gap-6">
           {navLinks.map((link) => (
             <Link
               key={link.href}
               to={link.href}
-              className="text-sm font-medium text-muted-foreground hover:text-foreground"
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
             >
               {link.label}
             </Link>
           ))}
 
-          {/* ✅ Farmer Only Button */}
           {isApprovedFarmer && (
             <Button
               size="sm"
@@ -68,23 +67,33 @@ export function Navbar() {
           )}
         </div>
 
+        {/* User Section */}
         <div className="flex items-center gap-3">
           {user && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-9 w-9 rounded-full">
+                <Button
+                  variant="ghost"
+                  className="relative h-9 w-9 rounded-full"
+                >
                   <Avatar className="h-9 w-9">
-                    <AvatarImage src={profile?.avatar_url || ''} />
-                    <AvatarFallback>
-                      {profile?.full_name?.charAt(0)}
+                    <AvatarImage
+                      src={profile?.avatar_url || undefined}
+                    />
+                    <AvatarFallback className="bg-primary text-white font-semibold">
+                      {profile?.full_name
+                        ? profile.full_name.charAt(0).toUpperCase()
+                        : user?.email
+                        ? user.email.charAt(0).toUpperCase()
+                        : 'U'}
                     </AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
 
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>
-                  {profile?.full_name}
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel className="font-semibold">
+                  {profile?.full_name || user.email}
                 </DropdownMenuLabel>
 
                 <DropdownMenuSeparator />

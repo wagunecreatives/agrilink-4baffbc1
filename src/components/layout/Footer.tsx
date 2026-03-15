@@ -89,11 +89,11 @@ export function Footer() {
               </li>
               <li className="flex items-center gap-3 text-sm text-sidebar-foreground/70">
                 <Phone className="w-4 h-4 text-sidebar-primary" />
-                +1 (555) 123-4567
+                +254 745256745
               </li>
               <li className="flex items-start gap-3 text-sm text-sidebar-foreground/70">
                 <MapPin className="w-4 h-4 text-sidebar-primary mt-0.5" />
-                123 Farm Road, Agriculture Valley, AG 12345
+                Zetech University,LH 011, Nairobi, Kenya
               </li>
             </ul>
           </div>

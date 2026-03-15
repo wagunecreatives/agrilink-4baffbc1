@@ -30,6 +30,7 @@ import { toast } from 'sonner';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { ImageUpload } from './ImageUpload';
 
+// Updated Zod schema with images required
 const listingSchema = z.object({
   title: z.string().min(5).max(100),
   description: z.string().max(1000).optional(),
@@ -38,6 +39,7 @@ const listingSchema = z.object({
   unit: z.string().min(1),
   price: z.coerce.number().positive(),
   location: z.string().min(2),
+  images: z.array(z.string()).min(1, "At least one image is required"), // ✅ required
 });
 
 type ListingFormData = z.infer<typeof listingSchema>;
@@ -59,7 +61,6 @@ export function CreateListingForm() {
   const navigate = useNavigate();
   const { user, isApprovedFarmer } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [images, setImages] = useState<string[]>([]);
 
   const form = useForm<ListingFormData>({
     resolver: zodResolver(listingSchema),
@@ -71,6 +72,7 @@ export function CreateListingForm() {
       unit: 'kg',
       price: undefined,
       location: '',
+      images: [],
     },
   });
 
@@ -99,7 +101,7 @@ export function CreateListingForm() {
           unit: data.unit,
           price: data.price,
           location: data.location,
-          images: images,
+          images: data.images, // validated by Zod
           status: 'active',
         });
 
@@ -277,10 +279,23 @@ export function CreateListingForm() {
               />
             </div>
 
-            <ImageUpload
-              images={images}
-              onImagesChange={setImages}
-              maxImages={5}
+            {/* ✅ Image upload required */}
+            <FormField
+              control={form.control}
+              name="images"
+              render={() => (
+                <FormItem>
+                  <FormLabel>Upload Images</FormLabel>
+                  <ImageUpload
+                    images={form.getValues('images')}
+                    onImagesChange={(imgs) =>
+                      form.setValue('images', imgs, { shouldValidate: true })
+                    }
+                    maxImages={5}
+                  />
+                  <FormMessage />
+                </FormItem>
+              )}
             />
 
             <div className="flex gap-3 pt-4">

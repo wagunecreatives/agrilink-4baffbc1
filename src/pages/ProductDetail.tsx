@@ -348,77 +348,73 @@ export default function ProductDetail() {
           {/* Sidebar */}
           <div className="space-y-6">
             {/* Seller info */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Seller Information</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                    <User className="h-6 w-6 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-medium">
-                      {seller?.full_name || "Anonymous Farmer"}
-                    </p>
-                    <p className="text-sm text-muted-foreground">Verified Seller</p>
-                  </div>
-                </div>
+        {/* Seller info */}
+{/* Seller info */}
+<Card>
+  <CardHeader>
+    <CardTitle className="text-lg">Seller Information</CardTitle>
+  </CardHeader>
 
-                {seller?.email && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                    <span>{seller.email}</span>
-                  </div>
-                )}
+  <CardContent className="space-y-4">
+    <div className="flex items-center gap-3">
+      <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
+        {seller?.avatar_url ? (
+          <img
+            src={seller.avatar_url}
+            alt={seller.full_name || "Seller"}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <User className="h-6 w-6 text-primary" />
+        )}
+      </div>
 
-                {!isOwnListing && (
-                  <Dialog open={messageDialogOpen} onOpenChange={setMessageDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" className="w-full">
-                        <MessageSquare className="h-4 w-4 mr-2" />
-                        Contact Seller
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Contact Seller</DialogTitle>
-                        <DialogDescription>
-                          Send a message to {seller?.full_name || "the seller"} about this
-                          listing.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="message">Your Message</Label>
-                          <Textarea
-                            id="message"
-                            placeholder="Hi, I'm interested in your product..."
-                            value={message}
-                            onChange={(e) => setMessage(e.target.value)}
-                            rows={4}
-                          />
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <Button
-                          variant="outline"
-                          onClick={() => setMessageDialogOpen(false)}
-                        >
-                          Cancel
-                        </Button>
-                        <Button onClick={handleSendMessage} disabled={isSendingMessage}>
-                          {isSendingMessage && (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          )}
-                          Send Message
-                        </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                )}
-              </CardContent>
-            </Card>
+      <div>
+        <p className="font-medium">
+          {seller?.full_name || "Seller"}
+        </p>
+
+        {seller?.role && (
+          <p className="text-sm text-muted-foreground capitalize">
+            {seller.role}
+          </p>
+        )}
+
+        {seller?.approval_status === "approved" ? (
+          <p className="text-sm text-green-600 font-medium">
+            Verified Seller
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Pending Verification
+          </p>
+        )}
+      </div>
+    </div>
+
+    {seller?.email && (
+      <div className="flex items-center gap-2 text-sm">
+        <Mail className="h-4 w-4 text-muted-foreground" />
+        <span>{seller.email}</span>
+      </div>
+    )}
+
+    {seller?.phone && (
+      <div className="flex items-center gap-2 text-sm">
+        <span className="font-medium">Phone:</span>
+        <span>{seller.phone}</span>
+      </div>
+    )}
+
+    {seller?.location && (
+      <div className="flex items-center gap-2 text-sm">
+        <MapPin className="h-4 w-4 text-muted-foreground" />
+        <span>{seller.location}</span>
+      </div>
+    )}
+  </CardContent>
+</Card>
+
 
             {/* Purchase card */}
             {!isOwnListing && isAvailable && (

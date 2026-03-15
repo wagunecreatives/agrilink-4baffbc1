@@ -216,7 +216,7 @@ export default function About() {
               Through continuous innovation and community building, we're working to make this 
               vision a reality—one farm at a time.
             </p>
-            <div className="inline-flex items-center gap-2 text-primary font-medium">
+            <div className="inline-flex items-center gap-2 text- font-medium">
               <Leaf className="w-5 h-5" />
               <span>Growing together, harvesting success</span>
             </div>
