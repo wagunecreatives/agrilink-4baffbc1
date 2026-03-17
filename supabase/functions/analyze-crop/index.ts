@@ -91,6 +91,25 @@ const buildFallbackContent = (
   severity: string,
   fallbackText?: string,
 ) => {
+
+  const extractCropFromDetails = (text: string): string | null => {
+  if (!text || typeof text !== "string") return null;
+  
+  const normalized = text.toLowerCase();
+  const cropPatterns = [
+    'walnut', 'apple', 'tomato', 'corn', 'maize', 'wheat', 'rice', 'soy', 'soybean', 
+    'potato', 'lettuce', 'cabbage', 'grape', 'strawberry', 'blueberry', 'cherry', 
+    'peach', 'orange', 'lemon', 'pepper', 'eggplant', 'squash', 'cucumber', 'bean',
+    'carrot', 'onion', 'garlic'
+  ];
+  
+  for (const crop of cropPatterns) {
+    if (normalized.includes(crop) && !normalized.includes(` ${crop} `)) {
+      return crop.charAt(0).toUpperCase() + crop.slice(1);
+    }
+  }
+  return null;
+};
   const cropLabel = crop !== "Unknown crop" ? crop.toLowerCase() : "the crop";
   const issueLabel =
     disease !== "Possible plant disease" ? disease : `a likely ${type}`;
@@ -190,7 +209,16 @@ const normalizeDiagnosis = (
   raw: DiagnosisRecord,
   fallbackText?: string,
 ) => {
-  const crop = cleanText(raw.crop) || "Unknown crop";
+  let cropText = cleanText(raw.crop);
+  let crop = cropText || "Unknown crop";
+
+  if (!cropText || cropText === "Unknown crop") {
+    const detailsCrop = extractCropFromDetails(cleanText(raw.analysis_details || ''));
+    if (detailsCrop) {
+      crop = detailsCrop;
+    }
+  }
+
   const disease = cleanText(raw.disease) || "Possible plant disease";
   const type = cleanText(raw.type).toLowerCase() || "disease";
   const severity = cleanText(raw.severity).toLowerCase() || "medium";
@@ -203,6 +231,7 @@ const normalizeDiagnosis = (
   );
 
   const analysisDetails = cleanText(raw.analysis_details);
+
   const treatment = parseList(raw.treatment);
   const prevention = parseList(raw.prevention);
   const urgentActions = parseList(raw.urgent_actions);
