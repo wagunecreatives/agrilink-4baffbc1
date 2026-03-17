@@ -41,6 +41,19 @@ export type DiagnosisRun = {
   notes: string;
 };
 
+export const cleanText = (value: unknown): string => {
+  if (typeof value === "string") return value.trim();
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  return "";
+};
+
 const isRecord = (value: unknown): value is DiagnosisRecord =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 

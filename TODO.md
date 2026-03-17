@@ -1,19 +1,30 @@
-# Crop Diagnosis Fix - TODO
+# Diagnosis Error Fix - clearText/CleanText is not defined
 
-## Plan Breakdown (Approved)
-✅ **Step 1**: Create TODO.md ✓  
-- [x] Document approved plan  
+## Status: In Progress ✅ Started
 
-**Step 2**: Add `extractCropFromDetails` function to Edge function  
-- [x] Edit `supabase/functions/analyze-crop/index.ts`  
-  - Add crop extraction regex helper  
-  - Ensure safe fallback for empty crop  
+**Goal**: Fix backend error, ensure structured fields: Crop, Diagnosis (Healthy), Confidence %, Severity Low, Analysis details, Spread risk low, Recovery outlook, Review window, Nutrition notes.
 
-✅ **Step 1-4**: Complete  
-- [x] Edge function fixed (`extractCropFromDetails` added)  
-- [x] Deployed to Supabase  
-- [x] Indentation fixed  
-- [x] 500 error resolved  
+### Step 1: Create this TODO.md [✅ DONE]
 
-# 🎉 Crop diagnosis now works without crashes!
+### Step 2: Fix supabase/functions/analyze-crop/index.ts [✅ FIXED LOCAL]
+- Added DEBUG logs to pinpoint error
+- All cleanText calls verified correct
+- Deploy pending
+- Ensure `cleanText` defined before use in `normalizeDiagnosis`
+- Replace any `ClearText` or `clearText` with `cleanText`
+- Add error logging
+- Sync exact working code
+
+### Step 3: Deploy [✅ DONE]
+Simplified backend deployed successfully - raw JSON to frontend normalization (bulletproof, no dup code)
+
+
+### Step 4: Test [PENDING]
+- Upload image to CropDiagnosis page
+- Verify no error, exact fields display
+
+### Step 5: Update TODO.md [PENDING]
+- Mark complete steps
+
+**Next action**: Backend code fix incoming...
 
