@@ -1,150 +1,332 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { GoogleGenerativeAI } from "npm:@google/generative-ai@^0.2.0";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
 };
 
-serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
+/* ------------------ UTILITIES ------------------ */
+
+type DiagnosisRecord = Record<string, unknown>;
+
+function extractJSON(text: string): DiagnosisRecord | null {
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) return null;
 
   try {
-    const body = await req.json();
-    const { imageBase64, fileName, mimeType = 'image/jpeg' } = body;
-
-    if (!imageBase64) {
-      throw new Error('imageBase64 is required');
-    }
-
-    const apiKey = Deno.env.get('GEMINI_API_KEY');
-    if (!apiKey) {
-      throw new Error('GEMINI_API_KEY not configured');
-    }
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-    const prompt = `Analyze this crop image for disease/health status.
-
-Return VALID JSON only (no other text) with this EXACT structure:
-
-{
-  "crop": "Crop name",
-  "disease": "Disease name or 'Healthy'",
-  "scientific_name": "Scientific name (if applicable)",
-  "confidence": 95,
-  "type": "disease|healthy|pest|nutrient|other",
-  "severity": "low|medium|high|critical",
-  "spread_risk": "low|medium|high",
-  "recovery_outlook": "Brief recovery summary (1-2 sentences)",
-  "recommended_review_window": "Timeframe like '24-48 hours'",
-  "analysis_details": "Detailed visual analysis (3-5 sentences)",
-  "nutrition_notes": "Nutrition/deficiency notes (optional)",
-  "key_indicators": ["bullet 1", "bullet 2"],
-  "urgent_actions": ["action 1"],
-  "treatment": ["general treatments"],
-  "organic_treatment": ["organic options"],
-  "conventional_treatment": ["chemical options"],
-  "prevention": ["preventive measures"]
+    const parsed = JSON.parse(match[0]);
+    return typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
-Be specific about visual symptoms, causes, and actionable recommendations.`;
-
-    const imagePart = {
-      inlineData: {
-        data: imageBase64,
-        mimeType
-      }
-    };
-
-    const result = await model.generateContent([prompt, imagePart]);
-    const response = await result.response;
-    const text = response.text();
-
-    // Parse JSON response (Gemini should return clean JSON)
-    let diagnosis;
-    try {
-      diagnosis = JSON.parse(text.trim());
-    } catch {
-      // Fallback parse if fenced
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      diagnosis = jsonMatch ? JSON.parse(jsonMatch[0]) : fallbackDiagnosis(fileName);
-    }
-
-    // Ensure all required fields
-    const fullDiagnosis = {
-      crop: diagnosis.crop || "Unknown crop",
-      disease: diagnosis.disease || "Unknown",
-      scientific_name: diagnosis.scientific_name || "",
-      confidence: Math.max(0, Math.min(100, diagnosis.confidence || 50)),
-      type: diagnosis.type || "unknown",
-      severity: diagnosis.severity || "medium",
-      spread_risk: diagnosis.spread_risk || "medium",
-      recovery_outlook: diagnosis.recovery_outlook || "Further field verification recommended.",
-      recommended_review_window: diagnosis.recommended_review_window || "24-48 hours",
-      analysis_details: diagnosis.analysis_details || "AI analysis completed. Review symptoms with local conditions.",
-      nutrition_notes: diagnosis.nutrition_notes || "",
-      key_indicators: Array.isArray(diagnosis.key_indicators) ? diagnosis.key_indicators : [],
-      urgent_actions: Array.isArray(diagnosis.urgent_actions) ? diagnosis.urgent_actions : [],
-      treatment: Array.isArray(diagnosis.treatment) ? diagnosis.treatment : [],
-      organic_treatment: Array.isArray(diagnosis.organic_treatment) ? diagnosis.organic_treatment : [],
-      conventional_treatment: Array.isArray(diagnosis.conventional_treatment) ? diagnosis.conventional_treatment : [],
-      prevention: Array.isArray(diagnosis.prevention) ? diagnosis.prevention : [],
-      monitoring_steps: Array.isArray(diagnosis.monitoring_steps) ? diagnosis.monitoring_steps : [],
-      likely_causes: Array.isArray(diagnosis.likely_causes) ? diagnosis.likely_causes : [],
-      risk_factors: Array.isArray(diagnosis.risk_factors) ? diagnosis.risk_factors : []
-    };
-
-    return new Response(JSON.stringify({
-      diagnosis: fullDiagnosis,
-      model_used: "gemini-1.5-flash",
-      generated_at: new Date().toISOString(),
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-
-  } catch (error) {
-    console.error('Diagnosis error:', error);
-
-    // Graceful fallback
-    return new Response(JSON.stringify({
-      diagnosis: fallbackDiagnosis('uploaded-crop'),
-      model_used: "fallback-v1",
-      error: error.message,
-      generated_at: new Date().toISOString(),
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+const cleanText = (val: unknown): string => {
+  if (typeof val === "string") return val.trim();
+  if (Array.isArray(val)) {
+    return val.map(v => (typeof v === "string" ? v.trim() : "")).join("\n");
   }
-});
+  return "";
+};
 
-function fallbackDiagnosis(fileName: string) {
+const parseList = (val: unknown): string[] => {
+  if (Array.isArray(val)) {
+    return val.map(v => cleanText(v)).filter(Boolean);
+  }
+
+  if (typeof val === "string") {
+    return val
+      .split(/\r?\n|,|;/)
+      .map(v => v.trim().replace(/^[-*\d.)\s]+/, ""))
+      .filter(Boolean);
+  }
+
+  return [];
+};
+
+const ensureList = (val: string[], fallback: string[], min = 1) =>
+  val.length >= min ? val : fallback;
+
+/* ------------------ FALLBACK GENERATOR ------------------ */
+
+function buildFallback(crop: string, disease: string, severity: string) {
+  const cropName = crop !== "Unknown crop" ? crop.toLowerCase() : "the crop";
+  const isHealthy = disease.toLowerCase() === "healthy";
+
+  if (isHealthy) {
+    return {
+      analysis_details: `The ${cropName} appears healthy with no strong visible signs of disease or pest damage.`,
+      urgent_actions: [
+        "Continue regular crop monitoring",
+        "Maintain proper irrigation and nutrition",
+      ],
+      treatment: [
+        "No treatment required",
+        "Maintain good farming practices",
+      ],
+      organic_treatment: [
+        "Use compost and organic soil enrichment",
+      ],
+      conventional_treatment: [
+        "No chemical treatment needed",
+      ],
+      prevention: [
+        "Regular scouting",
+        "Proper spacing and airflow",
+      ],
+      monitoring_steps: [
+        "Check leaves every 3–5 days",
+        "Monitor after weather changes",
+      ],
+      likely_causes: ["Healthy crop condition"],
+      risk_factors: ["Future stress from weather or pests"],
+      nutrition_notes: "No deficiency signs observed",
+      recovery_outlook: "Crop is in good condition",
+      recommended_review_window: "3–5 days",
+      spread_risk: "low",
+    };
+  }
+
   return {
-    crop: "Unknown crop",
-    disease: "Analysis unavailable",
-    confidence: 0,
-    severity: "low",
-    spread_risk: "low",
-    recovery_outlook: "Upload a clear image for accurate diagnosis.",
-    recommended_review_window: "Immediate",
-    analysis_details: `Fallback response for ${fileName}. Set GEMINI_API_KEY secret or check image quality.`,
-    nutrition_notes: "",
-    type: "unknown",
-    key_indicators: [],
-    urgent_actions: [],
-    treatment: [],
-    organic_treatment: [],
-    conventional_treatment: [],
-    prevention: [],
-    monitoring_steps: [],
-    likely_causes: [],
-    risk_factors: []
+    analysis_details: `The image suggests ${cropName} may be affected by ${disease}. Symptoms should be verified in the field.`,
+    urgent_actions: [
+      "Remove affected leaves",
+      "Avoid spreading contamination",
+    ],
+    treatment: [
+      "Apply appropriate crop-specific treatment",
+      "Improve field sanitation",
+    ],
+    organic_treatment: [
+      "Use neem-based or biological treatments",
+    ],
+    conventional_treatment: [
+      "Apply approved fungicide/pesticide",
+    ],
+    prevention: [
+      "Practice crop rotation",
+      "Maintain proper spacing",
+    ],
+    monitoring_steps: [
+      "Inspect daily for spread",
+      "Track symptom changes",
+    ],
+    likely_causes: ["High humidity or infection"],
+    risk_factors: ["Poor airflow", "Wet conditions"],
+    nutrition_notes: "Check soil nutrition levels",
+    recovery_outlook:
+      severity === "high"
+        ? "Recovery may be difficult without fast action"
+        : "Recovery possible with early treatment",
+    recommended_review_window: "24–48 hours",
+    spread_risk: severity === "high" ? "high" : "medium",
   };
 }
 
+/* ------------------ NORMALIZATION ------------------ */
+
+function normalizeDiagnosis(raw: DiagnosisRecord, fallbackText?: string) {
+  const crop = cleanText(raw.crop) || "Unknown crop";
+  const disease = cleanText(raw.disease) || "Unknown issue";
+  const severity = cleanText(raw.severity).toLowerCase() || "medium";
+
+  const fallback = buildFallback(crop, disease, severity);
+
+  return {
+    crop,
+    disease,
+    scientific_name: cleanText(raw.scientific_name),
+    confidence: Number(raw.confidence) || 70,
+    type: cleanText(raw.type) || "unknown",
+    severity,
+    spread_risk: cleanText(raw.spread_risk) || fallback.spread_risk,
+    recovery_outlook:
+      cleanText(raw.recovery_outlook) || fallback.recovery_outlook,
+    recommended_review_window:
+      cleanText(raw.recommended_review_window) ||
+      fallback.recommended_review_window,
+
+    key_indicators: parseList(raw.key_indicators),
+
+    analysis_details:
+      cleanText(raw.analysis_details) ||
+      fallback.analysis_details ||
+      fallbackText ||
+      "",
+
+    urgent_actions: ensureList(
+      parseList(raw.urgent_actions),
+      fallback.urgent_actions,
+      2,
+    ),
+
+    treatment: ensureList(
+      parseList(raw.treatment),
+      fallback.treatment,
+      2,
+    ),
+
+    organic_treatment: ensureList(
+      parseList(raw.organic_treatment),
+      fallback.organic_treatment,
+      1,
+    ),
+
+    conventional_treatment: ensureList(
+      parseList(raw.conventional_treatment),
+      fallback.conventional_treatment,
+      1,
+    ),
+
+    prevention: ensureList(
+      parseList(raw.prevention),
+      fallback.prevention,
+      2,
+    ),
+
+    monitoring_steps: ensureList(
+      parseList(raw.monitoring_steps),
+      fallback.monitoring_steps,
+      2,
+    ),
+
+    likely_causes: ensureList(
+      parseList(raw.likely_causes),
+      fallback.likely_causes,
+      1,
+    ),
+
+    risk_factors: ensureList(
+      parseList(raw.risk_factors),
+      fallback.risk_factors,
+      1,
+    ),
+
+    nutrition_notes:
+      cleanText(raw.nutrition_notes) || fallback.nutrition_notes,
+  };
+}
+
+/* ------------------ MAIN FUNCTION ------------------ */
+
+serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  try {
+    const { imageBase64 } = await req.json();
+
+    if (!imageBase64) {
+      return new Response(
+        JSON.stringify({ error: "Image is required" }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    const API_KEY =
+      Deno.env.get("GEMINI_API_KEY") ||
+      Deno.env.get("GOOGLE_API_KEY");
+
+    if (!API_KEY) {
+      throw new Error("Missing Gemini API key");
+    }
+
+    /* Detect mime */
+    let mimeType = "image/jpeg";
+    if (imageBase64.startsWith("iVBOR")) mimeType = "image/png";
+
+    const prompt = `Analyze this crop image and return ONLY JSON:
+
+{
+  "crop": "",
+  "disease": "",
+  "scientific_name": "",
+  "confidence": 90,
+  "type": "disease|pest|nutrient|healthy",
+  "severity": "low|medium|high",
+  "spread_risk": "low|medium|high",
+  "recovery_outlook": "",
+  "recommended_review_window": "",
+  "analysis_details": "",
+  "key_indicators": [],
+  "urgent_actions": [],
+  "treatment": [],
+  "organic_treatment": [],
+  "conventional_treatment": [],
+  "prevention": [],
+  "monitoring_steps": [],
+  "likely_causes": [],
+  "risk_factors": [],
+  "nutrition_notes": ""
+}`;
+
+    const models = ["gemini-2.5-flash", "gemini-1.5-flash"];
+
+    let outputText = "";
+    let usedModel = "";
+
+    for (const model of models) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    { text: prompt },
+                    {
+                      inline_data: {
+                        mime_type: mimeType,
+                        data: imageBase64,
+                      },
+                    },
+                  ],
+                },
+              ],
+            }),
+          }
+        );
+
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (text) {
+          outputText = text;
+          usedModel = model;
+          break;
+        }
+      } catch (err) {
+        console.error("Model error:", err);
+      }
+    }
+
+    if (!outputText) throw new Error("All models failed");
+
+    const parsed = extractJSON(outputText);
+    const diagnosis = parsed
+      ? normalizeDiagnosis(parsed)
+      : normalizeDiagnosis({}, outputText);
+
+    return new Response(
+      JSON.stringify({
+        diagnosis,
+        model_used: usedModel,
+        generated_at: new Date().toISOString(),
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (err) {
+    return new Response(
+      JSON.stringify({
+        error: err instanceof Error ? err.message : "Unknown error",
+      }),
+      { status: 500, headers: corsHeaders }
+    );
+  }
+});

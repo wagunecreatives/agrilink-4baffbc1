@@ -1,301 +1,286 @@
-import React, { useState, useCallback, useRef } from "react";
-import { CheckCircle2, ImagePlus, Loader2, X, Camera } from "lucide-react";
+import { useState, useRef } from "react";
+import { Navbar } from "@/components/layout/Navbar";
+import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Progress } from "@/components/ui/progress";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import type { DiagnosisResult } from "@/lib/diagnosis";
-import { analyzeCropImage } from "@/lib/diagnosis";
-import { cn } from "@/lib/utils";
+
+import {
+  Upload,
+  Camera,
+  Loader2,
+  Leaf,
+  ImageIcon,
+  Trash2,
+  CheckCircle2,
+} from "lucide-react";
 
 export default function CropDiagnosis() {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [qualityScore, setQualityScore] = useState<number | null>(null);
-  const [fieldNotes, setFieldNotes] = useState('');
-  const [result, setResult] = useState<DiagnosisResult | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [diagnosis, setDiagnosis] = useState<any | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+  const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  /* ---------------- IMAGE HANDLING ---------------- */
+
+  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (!file) return;
 
-    const score = Math.floor(Math.random() * 81) + 20; // Demo 20-100
-    setQualityScore(score);
-    setSelectedFile(file);
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
-    setResult(null);
+    if (!file.type.startsWith("image/")) {
+      return toast.error("Upload a valid image.");
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      return toast.error("Image must be < 5MB.");
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setSelectedImage(reader.result as string);
+      setDiagnosis(null);
+    };
+    reader.readAsDataURL(file);
   };
 
-  const handleAnalyze = async () => {
-    if (!selectedFile) return;
-    setLoading(true);
+  const clearImage = () => {
+    setSelectedImage(null);
+    setDiagnosis(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  /* ---------------- ANALYSIS ---------------- */
+
+  const analyzeCrop = async () => {
+    if (!selectedImage) return toast.error("Upload image first.");
+
+    setAnalyzing(true);
+    setDiagnosis(null);
+
     try {
-      const diagnosis = await analyzeCropImage(selectedFile, fieldNotes);
-      setResult(diagnosis);
-    } catch {
-      toast.error("Analysis failed");
+      const base64 = selectedImage.split(",")[1];
+
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/analyze-crop`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SUPABASE_ANON}`,
+          apikey: SUPABASE_ANON,
+        },
+        body: JSON.stringify({ imageBase64: base64 }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Analysis failed");
+
+      setDiagnosis(data.diagnosis);
+      toast.success("Analysis complete!");
+    } catch (err: any) {
+      toast.error(err.message || "Error analyzing crop");
     } finally {
-      setLoading(false);
+      setAnalyzing(false);
     }
   };
 
-  const handleReset = () => {
-    setSelectedFile(null);
-    setPreviewUrl(null);
-    setQualityScore(null);
-    setFieldNotes('');
-    setResult(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-  };
+  /* ---------------- UI HELPERS ---------------- */
 
+  const label = (text: string) =>
+    text?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const list = (arr: string[] = []) =>
+    arr.map((item, i) => (
+      <li key={i} className="flex gap-2">
+        <CheckCircle2 className="h-4 w-4 text-green-600 mt-1" />
+        <span>{item}</span>
+      </li>
+    ));
+
+  /* ---------------- RENDER ---------------- */
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8 flex items-center justify-center">
-      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-6 space-y-8">
-        {!result ? (
-          <>
-            {/* Top Section */}
-            <div className="space-y-4">
-              <h1 className="text-2xl font-semibold text-gray-900">
-                Upload crop image
-              </h1>
-              <p className="text-sm text-gray-600">
-                Use a clean image with visible symptoms, crop tissue detail, and stable lighting.
-              </p>
-            </div>
+    <div className="min-h-screen flex flex-col bg-background">
+      <Navbar />
 
-            {/* File Selection */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Choose crop image
-              </label>
-              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 hover:bg-gray-100 cursor-pointer transition-colors">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  onChange={handleFileSelect}
-                />
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500 truncate max-w-[200px]">
-                    {selectedFile ? selectedFile.name : "No file selected"}
-                  </span>
-                  {qualityScore !== null && (
-                    <div className="flex items-center gap-2">
-                      <Camera className="h-4 w-4 text-gray-500" />
-                      <Badge className={cn(
-                        "font-mono text-sm px-3 py-1",
-                        qualityScore < 40 ? "bg-red-100 text-red-800" : 
-                        qualityScore < 70 ? "bg-yellow-100 text-yellow-800" : 
-                        "bg-green-100 text-green-800"
-                      )}>
-                        {qualityScore}/100
-                      </Badge>
-<Progress value={qualityScore} className="w-20 h-2 [&>div]:h-2" />
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+      <main className="flex-1 container mx-auto px-4 py-8 max-w-5xl">
 
-            {/* Field Notes */}
-            <div>
-              <Textarea
-                placeholder="rainfall, spray history, spread pattern, irrigation changes, affected block..."
-                value={fieldNotes}
-                onChange={(e) => setFieldNotes(e.target.value)}
-                className="min-h-[100px] border-gray-200 focus-visible:ring-emerald-500"
+        {/* HEADER */}
+        <div className="text-center mb-8">
+          <div className="flex justify-center items-center gap-2 mb-3">
+            <Leaf className="h-8 w-8 text-primary" />
+            <h1 className="text-3xl font-bold">AI Crop Diagnosis</h1>
+          </div>
+          <p className="text-muted-foreground">
+            Upload a crop image and get instant disease detection & treatment.
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-6">
+
+          {/* UPLOAD */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex gap-2 items-center">
+                <Camera className="h-5 w-5" />
+                Upload Image
+              </CardTitle>
+              <CardDescription>Clear leaf photo works best</CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleImageSelect}
+                accept="image/*"
+                className="hidden"
               />
-            </div>
 
-            {/* Action Buttons */}
-            <div className="flex gap-4">
-              <Button 
-                onClick={handleAnalyze}
-                disabled={!selectedFile || loading}
-                className="flex-1 font-semibold text-lg py-3 px-6 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    Analyzing...
-                  </>
-                ) : (
-                  "Run AI analysis"
-                )}
-              </Button>
-              <Button 
-                onClick={handleReset}
-                variant="outline"
-                className="px-6 py-3 font-semibold rounded-xl border-gray-300 hover:border-gray-400"
-              >
-                Reset
-              </Button>
-            </div>
+              {!selectedImage ? (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed p-8 text-center rounded-lg cursor-pointer hover:border-primary/50"
+                >
+                  <ImageIcon className="mx-auto h-10 w-10 mb-2 opacity-50" />
+                  Click to upload
+                </div>
+              ) : (
+                <div className="relative">
+                  <img
+                    src={selectedImage}
+                    className="w-full h-64 object-cover rounded"
+                  />
+                  <Button
+                    size="icon"
+                    variant="destructive"
+                    className="absolute top-2 right-2"
+                    onClick={clearImage}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
 
-            {/* Divider */}
-            <hr className="border-gray-200" />
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Select
+                </Button>
 
-            {/* System Upgrades */}
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-900">
-                System upgrades now active
-              </h2>
-              <p className="text-gray-600">
-                Analysis depth, UI polish, and workflow clarity have all been increased in this module.
-              </p>
-              <div className="grid md:grid-cols-2 gap-6">
-                <ul className="space-y-2">
-                  <li className="flex items-center text-gray-800">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500 mr-3 flex-shrink-0" />
-                    Advanced crop-specific disease interpretation
-                  </li>
-                  <li className="flex items-center text-gray-800">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500 mr-3 flex-shrink-0" />
-                    Split organic and conventional recommendations
-                  </li>
-                  <li className="flex items-center text-gray-800">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500 mr-3 flex-shrink-0" />
-                    Glass cards and layered surfaces
-                  </li>
-                  <li className="flex items-center text-gray-800">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500 mr-3 flex-shrink-0" />
-                    Excel-reveal motion system
-                  </li>
-                  <li className="flex items-center text-gray-800">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500 mr-3 flex-shrink-0" />
-                    Exportable diagnosis report
-                  </li>
-                  <li className="flex items-center text-gray-800">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500 mr-3 flex-shrink-0" />
-                    Richer field note capture
-                  </li>
-                  <li className="flex items-center text-gray-800">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500 mr-3 flex-shrink-0" />
-                    Improved route and dashboard consistency
-                  </li>
-                </ul>
-                <ul className="space-y-2">
-                  <li className="flex items-center text-gray-800">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500 mr-3 flex-shrink-0" />
-                    More detailed treatment and prevention content
-                  </li>
-                  <li className="flex items-center text-gray-800">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500 mr-3 flex-shrink-0" />
-                    Persistent local diagnosis history
-                  </li>
-                  <li className="flex items-center text-gray-800">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500 mr-3 flex-shrink-0" />
-                    Scroll-reveal motion system
-                  </li>
-                  <li className="flex items-center text-gray-800">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500 mr-3 flex-shrink-0" />
-                    Upload quality scoring
-                  </li>
-                </ul>
+                <Button
+                  className="flex-1"
+                  onClick={analyzeCrop}
+                  disabled={!selectedImage || analyzing}
+                >
+                  {analyzing ? (
+                    <>
+                      <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      <Leaf className="mr-2 h-4 w-4" />
+                      Analyze
+                    </>
+                  )}
+                </Button>
               </div>
-            </div>
-          </>
-        ) : (
-          <div className="space-y-8">
-            <div className="text-center">
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent mb-4">
-                Gemini AI Analysis Complete
-              </h1>
-              <p className="text-xl text-gray-700 mb-8">Real AI diagnosis based on your image and notes</p>
-              <Button onClick={handleReset} variant="outline" className="font-bold">
-                <X className="mr-2 h-4 w-4" />
-                New Analysis
-              </Button>
-            </div>
-            <div className="grid lg:grid-cols-2 gap-8">
-              {/* Summary Card */}
-              <div className="bg-gradient-to-br from-emerald-50 to-green-50 border border-emerald-200 rounded-3xl p-8 shadow-xl">
-                <h2 className="text-2xl font-bold text-emerald-800 mb-6 flex items-center gap-3">
-                  📊 Diagnosis Summary
-                </h2>
-                <div className="space-y-6">
-                  <div>
-                    <span className="text-sm font-semibold uppercase text-emerald-600 tracking-wide">Crop Identified</span>
-                    <p className="text-4xl font-black text-gray-900 mt-1">{result.crop}</p>
-                  </div>
-                  <div>
-                    <span className="text-sm font-semibold uppercase text-red-600 tracking-wide">Disease Status</span>
-                    <p className="text-4xl font-black text-red-600 mt-1">{result.disease}</p>
-                  </div>
+            </CardContent>
+          </Card>
+
+          {/* RESULT */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Diagnosis</CardTitle>
+            </CardHeader>
+
+            <CardContent>
+              {analyzing ? (
+                <div className="text-center py-10">
+                  <Loader2 className="animate-spin h-10 w-10 mx-auto mb-3" />
+                  Analyzing crop...
+                </div>
+              ) : !diagnosis ? (
+                <p className="text-muted-foreground text-center">
+                  No analysis yet
+                </p>
+              ) : (
+                <div className="space-y-4">
+
+                  {/* BASIC INFO */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <span className="text-xs uppercase text-blue-600 font-semibold">Confidence</span>
-                      <p className="text-3xl font-black text-blue-600">{Math.round(result.confidence)}%</p>
+                      <p className="text-sm">Crop</p>
+                      <p className="font-bold">{diagnosis.crop}</p>
                     </div>
+
                     <div>
-                      <span className="text-xs uppercase text-orange-600 font-semibold">Severity</span>
-                      <p className="text-3xl font-bold text-orange-600 capitalize">{result.severity}</p>
+                      <p className="text-sm">Disease</p>
+                      <p className="font-bold">{diagnosis.disease}</p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm">Severity</p>
+                      <Badge>{label(diagnosis.severity)}</Badge>
+                    </div>
+
+                    <div>
+                      <p className="text-sm">Confidence</p>
+                      <Badge>{diagnosis.confidence}%</Badge>
                     </div>
                   </div>
+
+                  <Separator />
+
+                  {/* DETAILS */}
+                  <div>
+                    <h3 className="font-semibold mb-1">Analysis</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {diagnosis.analysis_details}
+                    </p>
+                  </div>
+
+                  {/* TREATMENT */}
+                  <div>
+                    <h3 className="font-semibold mb-1">Treatment</h3>
+                    <ul className="text-sm space-y-1">
+                      {list(diagnosis.treatment)}
+                    </ul>
+                  </div>
+
+                  {/* PREVENTION */}
+                  <div>
+                    <h3 className="font-semibold mb-1">Prevention</h3>
+                    <ul className="text-sm space-y-1">
+                      {list(diagnosis.prevention)}
+                    </ul>
+                  </div>
+
                 </div>
-              </div>
-              {/* Right - Recommendations */}
-              <div className="space-y-6">
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-3xl p-8 shadow-xl">
-                  <h2 className="text-2xl font-bold text-blue-800 mb-6">📈 Recovery Outlook</h2>
-                  <p className="text-lg leading-relaxed text-gray-800">{result.recovery_outlook}</p>
-                </div>
-                <div className="bg-gradient-to-br from-orange-50 to-yellow-50 border border-orange-200 rounded-3xl p-8 shadow-xl">
-                  <h2 className="text-2xl font-bold text-orange-800 mb-6">🔬 Key Analysis</h2>
-                  <p className="text-lg leading-relaxed whitespace-pre-wrap text-gray-800">{result.analysis_details}</p>
-                </div>
-              </div>
-            </div>
-            {/* Bottom sections */}
-            <div className="grid md:grid-cols-3 gap-6">
-              <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-3xl p-6">
-                <h3 className="font-bold text-lg text-green-800 mb-4">🌿 Organic Treatments</h3>
-                <ul className="space-y-2 text-sm">
-                  {result.organic_treatment.slice(0,3).map((item, i) => (
-                    <li key={i} className="flex items-center">
-                      <CheckCircle2 className="h-4 w-4 text-green-500 mr-2" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-3xl p-6">
-                <h3 className="font-bold text-lg text-blue-800 mb-4">⚗️ Conventional</h3>
-                <ul className="space-y-2 text-sm">
-                  {result.conventional_treatment.slice(0,3).map((item, i) => (
-                    <li key={i} className="flex items-center">
-                      <CheckCircle2 className="h-4 w-4 text-blue-500 mr-2" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="bg-gradient-to-br from-yellow-50 to-orange-50 border border-yellow-200 rounded-3xl p-6 md:col-span-1">
-                <h3 className="font-bold text-lg text-yellow-800 mb-4">📋 Next Steps</h3>
-                <ul className="space-y-2 text-sm">
-                  {result.prevention.slice(0,3).map((item, i) => (
-                    <li key={i} className="flex items-center">
-                      <CheckCircle2 className="h-4 w-4 text-yellow-500 mr-2" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-            <div className="text-center pt-8 border-t border-gray-200">
-              <p className="text-gray-600 mb-4">Review window: <span className="font-bold text-orange-600">{result.recommended_review_window}</span></p>
-            </div>
-          </div>
-        )}
-      </div>
+              )}
+            </CardContent>
+          </Card>
+
+        </div>
+      </main>
+
+      <Footer />
     </div>
   );
 }
-
