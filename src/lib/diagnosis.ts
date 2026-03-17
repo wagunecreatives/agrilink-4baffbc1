@@ -249,3 +249,38 @@ export const buildDiagnosisReport = (run: DiagnosisRun): string => {
 
   return sections.filter(Boolean).join("\n");
 };
+
+import { supabase } from "@/integrations/supabase/client";
+
+export async function analyzeCropImage(file: File, fieldNotes = ''): Promise<DiagnosisResult> {
+  if (!file.type.startsWith('image/')) {
+    throw new Error('Please select an image file');
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = (reader.result as string).split(',')[1];
+
+      try {
+        const { data, error } = await supabase.functions.invoke('analyze-crop', {
+ body: { 
+            imageBase64: base64, 
+            fileName: file.name,
+            mimeType: file.type,
+            notes: fieldNotes
+          }
+        });
+
+        if (error) throw error;
+        const rawDiagnosis = data?.diagnosis || data;
+        resolve(normalizeDiagnosis(rawDiagnosis));
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(new Error('Failed to read image'));
+    reader.readAsDataURL(file);
+  });
+}
+

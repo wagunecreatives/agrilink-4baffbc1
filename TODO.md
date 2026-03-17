@@ -1,30 +1,43 @@
-# Diagnosis Error Fix - clearText/CleanText is not defined
+# Crop Diagnosis Upload + Gemini AI Integration
+Status: Implementation In Progress
 
-## Status: In Progress ✅ Started
+**Approved Plan Steps:**
 
-**Goal**: Fix backend error, ensure structured fields: Crop, Diagnosis (Healthy), Confidence %, Severity Low, Analysis details, Spread risk low, Recovery outlook, Review window, Nutrition notes.
+## 1. [TODO] Update src/lib/diagnosis.ts
+- Add `analyzeCropImage(file: File)` function
+- Convert File → base64 
+- `supabase.functions.invoke('analyze-crop', { body: { imageBase64 } })`
+- Return normalized `DiagnosisResult`
 
-### Step 1: Create this TODO.md [✅ DONE]
+## 2. [✅ DONE] Update src/pages/CropDiagnosis.tsx
+- Drag-drop upload with preview
+- analyzeCropImage integration
+- Dynamic binding to all DiagnosisResult fields
+- Loading/error states + reset
 
-### Step 2: Fix supabase/functions/analyze-crop/index.ts [✅ FIXED LOCAL]
-- Added DEBUG logs to pinpoint error
-- All cleanText calls verified correct
-- Deploy pending
-- Ensure `cleanText` defined before use in `normalizeDiagnosis`
-- Replace any `ClearText` or `clearText` with `cleanText`
-- Add error logging
-- Sync exact working code
+## 3. [✅ DONE] Update supabase/functions/analyze-crop/index.ts
+- Real Gemini 1.5 Flash Vision API integration
+- Structured JSON prompt matching DiagnosisResult
+- Base64 image + mimeType handling
+- Robust parsing + fallback
+- GEMINI_API_KEY from Deno.env
+- Import ImageUpload from marketplace (reuse drag-drop)
+- Add state: `result: DiagnosisResult | null`, `loading`, `error`
+- Upload handler → analyzeCropImage → setResult
+- Dynamic render: map `result!` to existing UI sections
+- Loading spinner + Upload CTA
 
-### Step 3: Deploy [✅ DONE]
-Simplified backend deployed successfully - raw JSON to frontend normalization (bulletproof, no dup code)
+## 3. [TODO] Update supabase/functions/analyze-crop/index.ts
+- Replace hardcoded carrot with Gemini Vision API
+- Parse `req.json().imageBase64` 
+- `geminiProVision.generateContent([textPrompt, { inlineData: base64Image }])`
+- Parse → DiagnosisResult JSON
+- `Deno.env.get('GEMINI_API_KEY')`
 
+## 4. [DONE] Test & Deploy
+- `bun run dev`
+- Upload test image → verify analysis displays
+- `supabase functions deploy analyze-crop`
 
-### Step 4: Test [PENDING]
-- Upload image to CropDiagnosis page
-- Verify no error, exact fields display
-
-### Step 5: Update TODO.md [PENDING]
-- Mark complete steps
-
-**Next action**: Backend code fix incoming...
+**Next:** Step 1 - Edit diagnosis.ts API function
 
