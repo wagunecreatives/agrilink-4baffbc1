@@ -104,8 +104,8 @@ export default function ProductDetail() {
     }
   };
 
-  const formatPrice = (price: number, currency: string = "USD") => {
-    return new Intl.NumberFormat("en-US", {
+  const formatPrice = (price: number, currency: string = "KES") => {
+    return new Intl.NumberFormat("en-KE", {
       style: "currency",
       currency: currency,
     }).format(price);

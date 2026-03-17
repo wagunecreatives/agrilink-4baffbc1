@@ -84,15 +84,7 @@ const ensureMinimumList = (
   minimumItems = 1,
 ) => (value.length >= minimumItems ? value : fallback);
 
-const buildFallbackContent = (
-  crop: string,
-  disease: string,
-  type: string,
-  severity: string,
-  fallbackText?: string,
-) => {
-
-  const extractCropFromDetails = (text: string): string | null => {
+const extractCropFromDetails = (text: string): string | null => {
   if (!text || typeof text !== "string") return null;
   
   const normalized = text.toLowerCase();
@@ -110,6 +102,14 @@ const buildFallbackContent = (
   }
   return null;
 };
+
+const buildFallbackContent = (
+  crop: string,
+  disease: string,
+  type: string,
+  severity: string,
+  fallbackText?: string,
+) => {
   const cropLabel = crop !== "Unknown crop" ? crop.toLowerCase() : "the crop";
   const issueLabel =
     disease !== "Possible plant disease" ? disease : `a likely ${type}`;

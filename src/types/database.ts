@@ -79,7 +79,7 @@ export interface MarketListing {
   // Computed or optional fields for UI compatibility
   is_available?: boolean;
   price_per_unit?: number;
-  currency?: string;
+  currency: 'KES';
   farmer_id?: string;
   views_count?: number;
 }

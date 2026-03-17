@@ -149,10 +149,10 @@ export const normalizeDiagnosis = (value: unknown): DiagnosisResult => {
       }
     : diagnosis;
 
-  const crop = toText(merged.crop) || "Unknown";
-  const disease = toText(merged.disease) || "Unknown";
-  const type = toText(merged.type).toLowerCase() || "disease";
-  const severity = toText(merged.severity).toLowerCase() || "medium";
+  const crop = cleanText(merged.crop) || "Unknown crop";
+  const disease = cleanText(merged.disease) || "Unknown disease";
+  const type = cleanText(merged.type).toLowerCase() || "disease";
+  const severity = cleanText(merged.severity).toLowerCase() || "medium";
   const fallback = fallbackText(crop, disease, type, severity);
 
   return {
