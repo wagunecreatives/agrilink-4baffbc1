@@ -87,7 +87,7 @@ export function Footer() {
                 <span>+254 745 256 745</span>
               </li>
               <li className="flex gap-3">
-                <MapPin className="mt-0.5 h-4 w-4 stroke-red-500" />
+                <MapPin className="mt-0.5 h-4 w-4 text-sidebar-primary" />
                 <span>Zetech University, Nairobi, Kenya</span>
               </li>
             </ul>
