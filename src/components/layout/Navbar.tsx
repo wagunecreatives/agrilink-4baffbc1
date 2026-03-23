@@ -66,7 +66,7 @@ export function Navbar() {
             {user ? "Dashboard" : "Sign in"}
           </Button>
           {isApprovedFarmer && (
-            <Button className="gradient-hero text-blue-500" onClick={() => navigate("/marketplace/new")}>
+            <Button className="gradient-hero text-primary-foreground" onClick={() => navigate("/marketplace/new")}>
               Create Listing
             </Button>
           )}
