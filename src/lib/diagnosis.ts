@@ -1,13 +1,13 @@
 export type DiagnosisRecord = Record<string, unknown>;
 
-export type DiagnosisResult = {
+export interface DiagnosisResult {
   crop: string;
   disease: string;
   scientific_name: string;
   confidence: number;
   type: string;
-  severity: string;
-  spread_risk: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  spread_risk: 'low' | 'medium' | 'high';
   recovery_outlook: string;
   recommended_review_window: string;
   analysis_details: string;
@@ -21,7 +21,20 @@ export type DiagnosisResult = {
   monitoring_steps: string[];
   likely_causes: string[];
   risk_factors: string[];
-};
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+  });
+}
 
 export type DiagnosisRun = {
   id: string;
@@ -39,6 +52,19 @@ export type DiagnosisRun = {
   finishReason: string;
   diagnosis: DiagnosisResult;
   notes: string;
+};
+
+export const cleanText = (value: unknown): string => {
+  if (typeof value === "string") return value.trim();
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  return "";
 };
 
 const isRecord = (value: unknown): value is DiagnosisRecord =>
@@ -149,10 +175,10 @@ export const normalizeDiagnosis = (value: unknown): DiagnosisResult => {
       }
     : diagnosis;
 
-  const crop = toText(merged.crop) || "Unknown";
-  const disease = toText(merged.disease) || "Unknown";
-  const type = toText(merged.type).toLowerCase() || "disease";
-  const severity = toText(merged.severity).toLowerCase() || "medium";
+  const crop = cleanText(merged.crop) || "Unknown crop";
+  const disease = cleanText(merged.disease) || "Unknown disease";
+  const type = cleanText(merged.type).toLowerCase() || "disease";
+  const severity = cleanText(merged.severity).toLowerCase() || "medium";
   const fallback = fallbackText(crop, disease, type, severity);
 
   return {
@@ -236,3 +262,38 @@ export const buildDiagnosisReport = (run: DiagnosisRun): string => {
 
   return sections.filter(Boolean).join("\n");
 };
+
+import { supabase } from "@/integrations/supabase/client";
+
+export async function analyzeCropImage(
+  file: File,
+  fieldNotes: string
+): Promise<DiagnosisResult> {
+  const base64 = await fileToBase64(file);
+
+  const response = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-crop`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({
+        imageBase64: base64,
+        fileName: file.name,
+        mimeType: file.type,
+        fieldNotes: fieldNotes.trim() || undefined,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Analysis failed: ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data.diagnosis as DiagnosisResult;
+}
+

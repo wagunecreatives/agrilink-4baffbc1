@@ -1,1 +1,4 @@
-project_id = "euwwoltybldclpwoilig"
+project_id = "perdmslbgykblhafzpxo"
+
+[functions.analyze-crop]
+verify_jwt = false

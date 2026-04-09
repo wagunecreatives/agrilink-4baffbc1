@@ -269,9 +269,9 @@ export function CreateListingForm() {
                 name="price"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Price per Unit</FormLabel>
+                    <FormLabel>Price per Unit (KES)</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.01" {...field} />
+                      <Input type="number" step="0.01" placeholder="100" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

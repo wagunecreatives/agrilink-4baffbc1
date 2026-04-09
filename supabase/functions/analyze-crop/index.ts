@@ -7,261 +7,209 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+/* ------------------ UTILITIES ------------------ */
+
 type DiagnosisRecord = Record<string, unknown>;
 
 function extractJSON(text: string): DiagnosisRecord | null {
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return null;
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) return null;
 
   try {
-    const parsed = JSON.parse(jsonMatch[0]);
-    return typeof parsed === "object" && parsed !== null ? parsed : null;
+    const parsed = JSON.parse(match[0]);
+    return typeof parsed === "object" ? parsed : null;
   } catch {
     return null;
   }
 }
 
-const cleanText = (value: unknown): string => {
-  if (typeof value === "string") return value.trim();
-
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => (typeof item === "string" ? item.trim() : ""))
-      .filter(Boolean)
-      .join("\n");
+const cleanText = (val: unknown): string => {
+  if (typeof val === "string") return val.trim();
+  if (Array.isArray(val)) {
+    return val.map(v => (typeof v === "string" ? v.trim() : "")).join("\n");
   }
-
   return "";
 };
 
-const parseList = (value: unknown, splitOnComma = false): string[] => {
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => cleanText(item))
-      .map((item) => item.replace(/^[-*\d.)\s]+/, "").trim())
+const parseList = (val: unknown): string[] => {
+  if (Array.isArray(val)) {
+    return val.map(v => cleanText(v)).filter(Boolean);
+  }
+
+  if (typeof val === "string") {
+    return val
+      .split(/\r?\n|,|;/)
+      .map(v => v.trim().replace(/^[-*\d.)\s]+/, ""))
       .filter(Boolean);
   }
 
-  if (typeof value !== "string") return [];
-
-  const trimmed = value.trim();
-  if (!trimmed) return [];
-
-  if (trimmed.startsWith("[")) {
-    try {
-      return parseList(JSON.parse(trimmed), splitOnComma);
-    } catch {
-      // Fall back to line splitting.
-    }
-  }
-
-  const splitter = splitOnComma ? /\r?\n|;\s*|,\s*/ : /\r?\n|;\s*/;
-
-  return trimmed
-    .split(splitter)
-    .map((item) => item.replace(/^[-*\d.)\s]+/, "").trim())
-    .filter(Boolean);
+  return [];
 };
 
-const isWeakText = (
-  value: string,
-  minimumWords: number,
-  genericPhrases: string[],
-) => {
-  const normalized = value.trim().toLowerCase();
-  if (!normalized) return true;
+const ensureList = (val: string[], fallback: string[], min = 1) =>
+  val.length >= min ? val : fallback;
 
-  const wordCount = normalized.split(/\s+/).filter(Boolean).length;
-  return (
-    wordCount < minimumWords ||
-    genericPhrases.some((phrase) => normalized.includes(phrase))
-  );
-};
+/* ------------------ FALLBACK GENERATOR ------------------ */
 
-const ensureMinimumList = (
-  value: string[],
-  fallback: string[],
-  minimumItems = 1,
-) => (value.length >= minimumItems ? value : fallback);
-
-const buildFallbackContent = (
-  crop: string,
-  disease: string,
-  type: string,
-  severity: string,
-  fallbackText?: string,
-) => {
-  const cropLabel = crop !== "Unknown crop" ? crop.toLowerCase() : "the crop";
-  const issueLabel =
-    disease !== "Possible plant disease" ? disease : `a likely ${type}`;
-  const severityLabel = severity || "medium";
-  const isHealthy =
-    disease.toLowerCase() === "healthy" || type.toLowerCase() === "healthy";
+function buildFallback(crop: string, disease: string, severity: string) {
+  const cropName = crop !== "Unknown crop" ? crop.toLowerCase() : "the crop";
+  const isHealthy = disease.toLowerCase() === "healthy";
 
   if (isHealthy) {
     return {
-      analysis_details:
-        cleanText(fallbackText) ||
-        `The uploaded image appears to show a healthy ${cropLabel} specimen. I do not see strong visible evidence of an active disease, pest outbreak, or nutrient deficiency in the tissue shown.`,
+      analysis_details: `The ${cropName} appears healthy with no strong visible signs of disease or pest damage.`,
       urgent_actions: [
-        `Continue routine scouting across the ${cropLabel} block for new lesions, yellowing, or pest pressure.`,
-        `Maintain balanced irrigation and avoid sudden crop stress while the crop remains healthy.`,
+        "Continue regular crop monitoring",
+        "Maintain proper irrigation and nutrition",
       ],
       treatment: [
-        "No curative treatment is recommended at this stage.",
-        "Maintain balanced nutrition, clean irrigation practices, and field sanitation.",
+        "No treatment required",
+        "Maintain good farming practices",
       ],
       organic_treatment: [
-        "Support plant vigor with compost-based feeding and consistent soil moisture management.",
+        "Use compost and organic soil enrichment",
       ],
       conventional_treatment: [
-        "No chemical intervention is recommended unless symptoms appear or field pressure increases.",
+        "No chemical treatment needed",
       ],
       prevention: [
-        `Keep weeds and infected residue away from the ${cropLabel} field to lower disease pressure.`,
-        "Rotate scouting across representative sections of the field at least twice per week.",
+        "Regular scouting",
+        "Proper spacing and airflow",
       ],
       monitoring_steps: [
-        "Inspect upper and lower leaf surfaces every 3 to 5 days.",
-        "Re-check after heavy rainfall, irrigation shifts, or visible stress events.",
+        "Check leaves every 3–5 days",
+        "Monitor after weather changes",
       ],
-      likely_causes: [
-        "Current tissue looks visually healthy in the submitted image.",
-      ],
-      risk_factors: [
-        "Future risk may rise after prolonged humidity, poor airflow, or sanitation lapses.",
-      ],
-      nutrition_notes:
-        "No strong nutrient-linked visual stress pattern was isolated from the uploaded image alone.",
-      recovery_outlook:
-        "Outlook is strong if current crop management and scouting discipline are maintained.",
-      recommended_review_window:
-        "Review again in 3 to 5 days or sooner if new symptoms appear.",
+      likely_causes: ["Healthy crop condition"],
+      risk_factors: ["Future stress from weather or pests"],
+      nutrition_notes: "No deficiency signs observed",
+      recovery_outlook: "Crop is in good condition",
+      recommended_review_window: "3–5 days",
       spread_risk: "low",
     };
   }
 
   return {
-    analysis_details:
-      cleanText(fallbackText) ||
-      `The visible symptoms are consistent with ${issueLabel} in ${cropLabel}. Severity appears ${severityLabel}, so rapid field confirmation and treatment planning are advisable to reduce spread and crop stress.`,
+    analysis_details: `The image suggests ${cropName} may be affected by ${disease}. Symptoms should be verified in the field.`,
     urgent_actions: [
-      `Isolate or remove the most severely affected ${cropLabel} tissue where practical.`,
-      "Reduce leaf wetness duration and avoid moving contaminated tools between plants.",
+      "Remove affected leaves",
+      "Avoid spreading contamination",
     ],
     treatment: [
-      `Apply a crop-labeled control strategy appropriate for ${issueLabel} on ${cropLabel}.`,
-      "Combine direct treatment with sanitation and environmental correction for better results.",
+      "Apply appropriate crop-specific treatment",
+      "Improve field sanitation",
     ],
     organic_treatment: [
-      "Use crop-safe biological or low-residue options where locally recommended and properly labeled.",
+      "Use neem-based or biological treatments",
     ],
     conventional_treatment: [
-      "Use a registered product labeled for the crop and condition, following local guidance and label timing.",
+      "Apply approved fungicide/pesticide",
     ],
     prevention: [
-      "Remove infected residue promptly and improve spacing or airflow where possible.",
-      "Avoid repeated stress from overwatering, poor drainage, or uneven feeding.",
+      "Practice crop rotation",
+      "Maintain proper spacing",
     ],
     monitoring_steps: [
-      "Inspect new growth and neighboring plants every 24 to 48 hours.",
-      "Track whether lesions enlarge, darken, or spread after treatment.",
+      "Inspect daily for spread",
+      "Track symptom changes",
     ],
-    likely_causes: [
-      "Favorable disease pressure from humidity, surface wetness, or contaminated residue.",
-    ],
-    risk_factors: [
-      "High humidity or prolonged leaf wetness.",
-      "Poor sanitation or movement of contaminated tools and hands.",
-    ],
-    nutrition_notes:
-      "Visible symptoms should still be cross-checked with nutrient history so deficiency stress is not missed.",
+    likely_causes: ["High humidity or infection"],
+    risk_factors: ["Poor airflow", "Wet conditions"],
+    nutrition_notes: "Check soil nutrition levels",
     recovery_outlook:
-      severityLabel === "high"
-        ? "Recovery is possible, but delayed action could cause significant yield reduction."
-        : "Recovery outlook is fair if treatment and monitoring begin immediately.",
-    recommended_review_window:
-      "Review within the next 24 to 48 hours to confirm whether symptoms are stabilizing.",
-    spread_risk: severityLabel === "high" ? "high" : "medium",
+      severity === "high"
+        ? "Recovery may be difficult without fast action"
+        : "Recovery possible with early treatment",
+    recommended_review_window: "24–48 hours",
+    spread_risk: severity === "high" ? "high" : "medium",
   };
-};
+}
 
-const normalizeDiagnosis = (
-  raw: DiagnosisRecord,
-  fallbackText?: string,
-) => {
+/* ------------------ NORMALIZATION ------------------ */
+
+function normalizeDiagnosis(raw: DiagnosisRecord, fallbackText?: string) {
   const crop = cleanText(raw.crop) || "Unknown crop";
-  const disease = cleanText(raw.disease) || "Possible plant disease";
-  const type = cleanText(raw.type).toLowerCase() || "disease";
+  const disease = cleanText(raw.disease) || "Unknown issue";
   const severity = cleanText(raw.severity).toLowerCase() || "medium";
-  const fallback = buildFallbackContent(
-    crop,
-    disease,
-    type,
-    severity,
-    fallbackText,
-  );
 
-  const analysisDetails = cleanText(raw.analysis_details);
-  const treatment = parseList(raw.treatment);
-  const prevention = parseList(raw.prevention);
-  const urgentActions = parseList(raw.urgent_actions);
-  const monitoringSteps = parseList(raw.monitoring_steps);
-  const likelyCauses = parseList(raw.likely_causes);
-  const riskFactors = parseList(raw.risk_factors);
-  const organicTreatment = parseList(raw.organic_treatment);
-  const conventionalTreatment = parseList(raw.conventional_treatment);
-  const nutritionNotes = cleanText(raw.nutrition_notes);
+  const fallback = buildFallback(crop, disease, severity);
 
   return {
     crop,
     disease,
     scientific_name: cleanText(raw.scientific_name),
-    confidence:
-      typeof raw.confidence === "number"
-        ? raw.confidence
-        : Number(raw.confidence) || 70,
-    type,
+    confidence: Number(raw.confidence) || 70,
+    type: cleanText(raw.type) || "unknown",
     severity,
-    spread_risk: cleanText(raw.spread_risk).toLowerCase() || fallback.spread_risk,
+    spread_risk: cleanText(raw.spread_risk) || fallback.spread_risk,
     recovery_outlook:
       cleanText(raw.recovery_outlook) || fallback.recovery_outlook,
     recommended_review_window:
       cleanText(raw.recommended_review_window) ||
       fallback.recommended_review_window,
-    key_indicators: parseList(raw.key_indicators, true),
-    analysis_details: isWeakText(analysisDetails, 12, [
-      "ai analysis completed",
-      "consult local agronomist",
-    ])
-      ? fallback.analysis_details
-      : analysisDetails,
-    treatment: ensureMinimumList(treatment, fallback.treatment, 2),
-    organic_treatment: ensureMinimumList(
-      organicTreatment,
+
+    key_indicators: parseList(raw.key_indicators),
+
+    analysis_details:
+      cleanText(raw.analysis_details) ||
+      fallback.analysis_details ||
+      fallbackText ||
+      "",
+
+    urgent_actions: ensureList(
+      parseList(raw.urgent_actions),
+      fallback.urgent_actions,
+      2,
+    ),
+
+    treatment: ensureList(
+      parseList(raw.treatment),
+      fallback.treatment,
+      2,
+    ),
+
+    organic_treatment: ensureList(
+      parseList(raw.organic_treatment),
       fallback.organic_treatment,
       1,
     ),
-    conventional_treatment: ensureMinimumList(
-      conventionalTreatment,
+
+    conventional_treatment: ensureList(
+      parseList(raw.conventional_treatment),
       fallback.conventional_treatment,
       1,
     ),
-    prevention: ensureMinimumList(prevention, fallback.prevention, 2),
-    urgent_actions: ensureMinimumList(urgentActions, fallback.urgent_actions, 2),
-    monitoring_steps: ensureMinimumList(
-      monitoringSteps,
+
+    prevention: ensureList(
+      parseList(raw.prevention),
+      fallback.prevention,
+      2,
+    ),
+
+    monitoring_steps: ensureList(
+      parseList(raw.monitoring_steps),
       fallback.monitoring_steps,
       2,
     ),
-    likely_causes: ensureMinimumList(likelyCauses, fallback.likely_causes, 1),
-    risk_factors: ensureMinimumList(riskFactors, fallback.risk_factors, 1),
+
+    likely_causes: ensureList(
+      parseList(raw.likely_causes),
+      fallback.likely_causes,
+      1,
+    ),
+
+    risk_factors: ensureList(
+      parseList(raw.risk_factors),
+      fallback.risk_factors,
+      1,
+    ),
+
     nutrition_notes:
-      isWeakText(nutritionNotes, 7, ["not available", "unknown"])
-        ? fallback.nutrition_notes
-        : nutritionNotes,
+      cleanText(raw.nutrition_notes) || fallback.nutrition_notes,
   };
-};
+}
+
+/* ------------------ MAIN FUNCTION ------------------ */
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -270,157 +218,115 @@ serve(async (req: Request) => {
 
   try {
     const { imageBase64 } = await req.json();
+
     if (!imageBase64) {
-      return new Response(JSON.stringify({ error: "Image required" }), {
-        status: 400,
-        headers: corsHeaders,
-      });
-    }
-
-    const GEMINI_API_KEY =
-      Deno.env.get("GOOGLE_API_KEY") || Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) {
-      return new Response(JSON.stringify({ error: "Gemini API key missing" }), {
-        status: 500,
-        headers: corsHeaders,
-      });
-    }
-
-    let mimeType = "image/jpeg";
-    if (imageBase64.startsWith("/9j/")) mimeType = "image/jpeg";
-    else if (imageBase64.startsWith("iVBOR")) mimeType = "image/png";
-    else if (imageBase64.startsWith("R0lGOD")) mimeType = "image/gif";
-    else if (imageBase64.startsWith("UklGR")) mimeType = "image/webp";
-
-    const prompt = `You are an advanced agricultural diagnostics assistant. Analyze the submitted crop image and return only a valid JSON object with this exact schema:
-{
-  "crop": "common crop name",
-  "disease": "specific disease, pest, nutrient deficiency, or Healthy",
-  "scientific_name": "scientific pathogen or condition name if known",
-  "confidence": 92,
-  "type": "disease/pest/nutrient deficiency/healthy",
-  "severity": "low/medium/high",
-  "spread_risk": "low/medium/high",
-  "recovery_outlook": "2 to 3 sentences on likely recovery if action is taken now",
-  "recommended_review_window": "when the farmer should inspect again",
-  "key_indicators": ["specific visible symptom", "specific visible symptom"],
-  "analysis_details": "4 to 6 full sentences explaining the visible evidence in this exact image, why it matches the diagnosis, and what uncertainty remains",
-  "urgent_actions": ["2 to 4 immediate next actions for the farmer"],
-  "treatment": ["3 to 6 crop-specific treatment steps"],
-  "organic_treatment": ["1 to 3 organic or low-residue treatment options if applicable"],
-  "conventional_treatment": ["1 to 3 conventional treatment options if applicable"],
-  "prevention": ["3 to 6 crop-specific prevention actions"],
-  "monitoring_steps": ["2 to 4 follow-up monitoring steps"],
-  "likely_causes": ["1 to 3 probable contributing causes or triggers"],
-  "risk_factors": ["1 to 4 environmental or management risk factors"],
-  "nutrition_notes": "1 to 3 sentences on whether nutrient stress seems relevant"
-}
-
-Rules:
-- Identify the crop first, then the issue.
-- Be specific to the exact uploaded image instead of generic farming advice.
-- Return treatment and prevention as arrays, not paragraphs.
-- If the plant appears healthy, clearly say Healthy and provide monitoring-focused guidance.
-- Do not include markdown.
-- Do not repeat the JSON structure in the explanation.
-- Return only the JSON object.`;
-
-    const modelsToTry = [
-      "gemini-2.5-flash",
-      "gemini-1.5-flash",
-      "gemini-pro-vision",
-    ];
-
-    let lastError: unknown = null;
-    let responseText = "";
-    let usedModel = "";
-    let finishReason = "";
-
-    for (const model of modelsToTry) {
-      try {
-        const apiUrl =
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
-        const response = await fetch(apiUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  { text: prompt },
-                  { inline_data: { mime_type: mimeType, data: imageBase64 } },
-                ],
-              },
-            ],
-            safetySettings: [
-              { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-              { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-              {
-                category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                threshold: "BLOCK_NONE",
-              },
-              {
-                category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-                threshold: "BLOCK_NONE",
-              },
-            ],
-            generationConfig: { temperature: 0.2, maxOutputTokens: 1536 },
-          }),
-        });
-
-        const result = await response.json();
-        if (result.error) {
-          lastError = result.error;
-          continue;
-        }
-
-        const candidate = result?.candidates?.[0];
-        if (candidate?.finishReason && candidate.finishReason !== "STOP") {
-          finishReason = candidate.finishReason;
-        }
-
-        const text = candidate?.content?.parts?.[0]?.text;
-        if (text) {
-          responseText = text;
-          usedModel = model;
-          break;
-        }
-
-        lastError = { finishReason: candidate?.finishReason };
-      } catch (error) {
-        lastError = error;
-      }
-    }
-
-    if (!responseText) {
-      throw new Error(
-        `All models failed. Last error: ${JSON.stringify(lastError)}`,
+      return new Response(
+        JSON.stringify({ error: "Image is required" }),
+        { status: 400, headers: corsHeaders }
       );
     }
 
-    const parsed = extractJSON(responseText);
+    const API_KEY =
+      Deno.env.get("GEMINI_API_KEY") ||
+      Deno.env.get("GOOGLE_API_KEY");
+
+    if (!API_KEY) {
+      throw new Error("Missing Gemini API key");
+    }
+
+    /* Detect mime */
+    let mimeType = "image/jpeg";
+    if (imageBase64.startsWith("iVBOR")) mimeType = "image/png";
+
+    const prompt = `Analyze this crop image and return ONLY JSON:
+
+{
+  "crop": "",
+  "disease": "",
+  "scientific_name": "",
+  "confidence": 90,
+  "type": "disease|pest|nutrient|healthy",
+  "severity": "low|medium|high",
+  "spread_risk": "low|medium|high",
+  "recovery_outlook": "",
+  "recommended_review_window": "",
+  "analysis_details": "",
+  "key_indicators": [],
+  "urgent_actions": [],
+  "treatment": [],
+  "organic_treatment": [],
+  "conventional_treatment": [],
+  "prevention": [],
+  "monitoring_steps": [],
+  "likely_causes": [],
+  "risk_factors": [],
+  "nutrition_notes": ""
+}`;
+
+    const models = ["gemini-2.5-flash", "gemini-1.5-flash"];
+
+    let outputText = "";
+    let usedModel = "";
+
+    for (const model of models) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    { text: prompt },
+                    {
+                      inline_data: {
+                        mime_type: mimeType,
+                        data: imageBase64,
+                      },
+                    },
+                  ],
+                },
+              ],
+            }),
+          }
+        );
+
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (text) {
+          outputText = text;
+          usedModel = model;
+          break;
+        }
+      } catch (err) {
+        console.error("Model error:", err);
+      }
+    }
+
+    if (!outputText) throw new Error("All models failed");
+
+    const parsed = extractJSON(outputText);
     const diagnosis = parsed
       ? normalizeDiagnosis(parsed)
-      : normalizeDiagnosis({}, responseText.slice(0, 900));
+      : normalizeDiagnosis({}, outputText);
 
     return new Response(
       JSON.stringify({
         diagnosis,
         model_used: usedModel,
-        finish_reason: finishReason || "unknown",
         generated_at: new Date().toISOString(),
       }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("Edge function error:", message);
-
+  } catch (err) {
     return new Response(
-      JSON.stringify({ error: "Analysis failed: " + message }),
-      { status: 500, headers: corsHeaders },
+      JSON.stringify({
+        error: err instanceof Error ? err.message : "Unknown error",
+      }),
+      { status: 500, headers: corsHeaders }
     );
   }
 });
