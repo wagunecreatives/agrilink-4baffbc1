@@ -18,6 +18,7 @@ dist-ssr
 # Local environment and generated state
 .env
 supabase/.temp/
+supabase/.branches/
 
 # Editor directories and files
 .vscode/*
