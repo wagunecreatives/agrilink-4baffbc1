@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 # Fix Crop Diagnosis Edge Function - COMPLETE ✅
 
 ## Progress Tracking
@@ -22,3 +23,15 @@ Function fixes applied: Clean code, robust fallback, image validation, timeouts.
 2. Local test: `supabase functions serve analyze-crop --env-file ./supabase/.env.local`
 3. Deploy: `supabase functions deploy analyze-crop`
 4. Test CropDiagnosis page ✅
+=======
+# AI Crop Diagnosis Fix - TODO
+
+## Plan Steps:
+- [x] Step 1: Create TODO.md with approved plan tracking
+- [x] Step 2: Update src/pages/CropDiagnosis.tsx with debugging, normalization, and UI fallbacks
+- [ ] Step 3: Test the diagnosis feature locally (upload image, check console/UI)
+- [ ] Step 4: Verify all fields populate (Crop, Disease, Analysis, Treatment, Prevention)
+- [ ] Step 5: Remove debug console.log if working, attempt completion
+
+**Status:** Steps 1-2 complete. Step 3 tested - shows fallbacks (Unknown crop/disease, 0% confidence, empty lists). Backend normalizeDiagnosis triggers fallbacks → Gemini API returns no parseable JSON (Gemini prompt/parsing fails). Plan: Fix Supabase function prompt/parsing for real AI detection + better fallbacks. Step 4 pending real data.
+>>>>>>> Stashed changes
