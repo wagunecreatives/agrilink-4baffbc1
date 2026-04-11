@@ -1,4 +1,6 @@
 import { useState, useRef } from "react";
+import type { DiagnosisResult } from "@/lib/diagnosis";
+import { normalizeDiagnosis } from "@/lib/diagnosis";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
@@ -26,7 +28,7 @@ import {
 export default function CropDiagnosis() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
-  const [diagnosis, setDiagnosis] = useState<any | null>(null);
+  const [diagnosis, setDiagnosis] = useState<DiagnosisResult | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -83,9 +85,18 @@ export default function CropDiagnosis() {
       });
 
       const data = await res.json();
+      console.log('Raw API response:', data);
+      
       if (!res.ok) throw new Error(data.error || "Analysis failed");
-
-      setDiagnosis(data.diagnosis);
+      
+      if (!data.diagnosis) {
+        throw new Error(`No diagnosis in response: ${JSON.stringify(data)}`);
+      }
+      
+      const normalized = normalizeDiagnosis(data.diagnosis);
+      console.log('Normalized diagnosis:', normalized);
+      
+      setDiagnosis(normalized);
       toast.success("Analysis complete!");
     } catch (err: any) {
       toast.error(err.message || "Error analyzing crop");
@@ -96,8 +107,10 @@ export default function CropDiagnosis() {
 
   /* ---------------- UI HELPERS ---------------- */
 
-  const label = (text: string) =>
-    text?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const label = (text?: string) =>
+    (text || "")
+      ?.replace(/_/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase()) || "Unknown";
 
   const list = (arr: string[] = []) =>
     arr.map((item, i) => (
@@ -227,22 +240,22 @@ export default function CropDiagnosis() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm">Crop</p>
-                      <p className="font-bold">{diagnosis.crop}</p>
+                      <p className="font-bold">{diagnosis?.crop || "Unknown"}</p>
                     </div>
 
                     <div>
                       <p className="text-sm">Disease</p>
-                      <p className="font-bold">{diagnosis.disease}</p>
+                      <p className="font-bold">{diagnosis?.disease || "No disease detected"}</p>
                     </div>
 
                     <div>
                       <p className="text-sm">Severity</p>
-                      <Badge>{label(diagnosis.severity)}</Badge>
+                      <Badge>{label(diagnosis?.severity)}</Badge>
                     </div>
 
                     <div>
                       <p className="text-sm">Confidence</p>
-                      <Badge>{diagnosis.confidence}%</Badge>
+                      <Badge>{diagnosis?.confidence ?? 0}%</Badge>
                     </div>
                   </div>
 
@@ -252,7 +265,7 @@ export default function CropDiagnosis() {
                   <div>
                     <h3 className="font-semibold mb-1">Analysis</h3>
                     <p className="text-sm text-muted-foreground">
-                      {diagnosis.analysis_details}
+                      {diagnosis?.analysis_details || "No analysis details available."}
                     </p>
                   </div>
 
@@ -260,7 +273,9 @@ export default function CropDiagnosis() {
                   <div>
                     <h3 className="font-semibold mb-1">Treatment</h3>
                     <ul className="text-sm space-y-1">
-                      {list(diagnosis.treatment)}
+                      {diagnosis?.treatment?.length ? list(diagnosis.treatment) : (
+                        <p className="text-sm text-muted-foreground">No treatment recommendations available.</p>
+                      )}
                     </ul>
                   </div>
 
@@ -268,7 +283,9 @@ export default function CropDiagnosis() {
                   <div>
                     <h3 className="font-semibold mb-1">Prevention</h3>
                     <ul className="text-sm space-y-1">
-                      {list(diagnosis.prevention)}
+                      {diagnosis?.prevention?.length ? list(diagnosis.prevention) : (
+                        <p className="text-sm text-muted-foreground">No prevention recommendations available.</p>
+                      )}
                     </ul>
                   </div>
 
