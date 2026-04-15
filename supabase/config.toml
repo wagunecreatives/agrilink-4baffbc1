@@ -2,3 +2,12 @@ project_id = "perdmslbgykblhafzpxo"
 
 [functions.analyze-crop]
 verify_jwt = false
+
+# 🔥 ADD THIS (VERY IMPORTANT)
+[analytics]
+enabled = false
+
+# (Optional but recommended if storage was failing)
+[storage]
+enabled = false
+# Note: Marketplace bucket creation disabled to avoid schema error

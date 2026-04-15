@@ -21,36 +21,54 @@ import {
   ImageIcon,
   Trash2,
   CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
+
+// Type definition for the diagnosis object
+interface Diagnosis {
+  crop: string;
+  disease: string;
+  severity: "low" | "medium" | "high";
+  confidence: number;
+  analysis_details: string;
+  organic_treatment: string[];
+  conventional_treatment: string[];
+  prevention: string[];
+  monitoring_steps: string[];
+  recovery_outlook: string;
+  spread_risk: "low" | "medium" | "high";
+}
 
 export default function CropDiagnosis() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
-  const [diagnosis, setDiagnosis] = useState<any | null>(null);
+  const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
   const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-  /* ---------------- IMAGE HANDLING ---------------- */
-
   const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      return toast.error("Upload a valid image.");
+      toast.error("Please upload a valid image file (JPEG, PNG).");
+      return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      return toast.error("Image must be < 5MB.");
+      toast.error("Image must be smaller than 5MB.");
+      return;
     }
 
     const reader = new FileReader();
     reader.onloadend = () => {
       setSelectedImage(reader.result as string);
       setDiagnosis(null);
+      setApiError(null);
     };
     reader.readAsDataURL(file);
   };
@@ -58,21 +76,25 @@ export default function CropDiagnosis() {
   const clearImage = () => {
     setSelectedImage(null);
     setDiagnosis(null);
+    setApiError(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  /* ---------------- ANALYSIS ---------------- */
-
   const analyzeCrop = async () => {
-    if (!selectedImage) return toast.error("Upload image first.");
+    if (!selectedImage) {
+      toast.error("Please upload an image first.");
+      return;
+    }
 
     setAnalyzing(true);
     setDiagnosis(null);
+    setApiError(null);
 
     try {
+      // Extract raw base64 (without data:image prefix)
       const base64 = selectedImage.split(",")[1];
 
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/analyze-crop`, {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/analyze-crop`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -82,53 +104,78 @@ export default function CropDiagnosis() {
         body: JSON.stringify({ imageBase64: base64 }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Analysis failed");
+      const data = await response.json();
 
-      setDiagnosis(data.diagnosis);
-      toast.success("Analysis complete!");
+      // Handle both 200 with error flag and actual HTTP errors
+      if (!response.ok || data.success === false) {
+        const errorMsg = data.error || "Analysis failed. Please try again.";
+        throw new Error(errorMsg);
+      }
+
+      if (data.diagnosis) {
+        setDiagnosis(data.diagnosis);
+        if (data.fallback) {
+          toast.warning("⚠️ Using fallback mode – Gemini API key may be missing.");
+        } else {
+          toast.success("✅ AI diagnosis complete!");
+        }
+      } else {
+        throw new Error("No diagnosis data received.");
+      }
     } catch (err: any) {
-      toast.error(err.message || "Error analyzing crop");
+      console.error("Analysis error:", err);
+      const message = err.message || "Unknown error occurred";
+      toast.error(message);
+      setApiError(message);
+      // Set a fallback diagnosis so UI doesn't stay empty
+      setDiagnosis({
+        crop: "Unknown crop",
+        disease: "Analysis failed",
+        severity: "medium",
+        confidence: 0,
+        analysis_details: message,
+        organic_treatment: ["Try again with a clearer photo"],
+        conventional_treatment: [],
+        prevention: ["Ensure good lighting", "Capture whole leaf"],
+        monitoring_steps: [],
+        recovery_outlook: "Unknown",
+        spread_risk: "medium",
+      });
     } finally {
       setAnalyzing(false);
     }
   };
 
-  /* ---------------- UI HELPERS ---------------- */
-
+  // Helper: Capitalize first letter of each word
   const label = (text: string) =>
     text?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
-  const list = (arr: string[] = []) =>
-    arr.map((item, i) => (
-      <li key={i} className="flex gap-2">
-        <CheckCircle2 className="h-4 w-4 text-green-600 mt-1" />
-        <span>{item}</span>
+  // Helper: Render list of strings with checkmark icons
+  const renderList = (items: string[] | undefined) =>
+    items?.map((item, i) => (
+      <li key={i} className="flex gap-2 items-start">
+        <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
+        <span className="text-sm">{item}</span>
       </li>
     ));
-
-  /* ---------------- RENDER ---------------- */
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
 
       <main className="flex-1 container mx-auto px-4 py-8 max-w-5xl">
-
-        {/* HEADER */}
         <div className="text-center mb-8">
           <div className="flex justify-center items-center gap-2 mb-3">
             <Leaf className="h-8 w-8 text-primary" />
             <h1 className="text-3xl font-bold">AI Crop Diagnosis</h1>
           </div>
           <p className="text-muted-foreground">
-            Upload a crop image and get instant disease detection & treatment.
+            Upload a leaf photo and get instant disease detection & treatment recommendations.
           </p>
         </div>
 
         <div className="grid md:grid-cols-2 gap-6">
-
-          {/* UPLOAD */}
+          {/* Upload Card */}
           <Card>
             <CardHeader>
               <CardTitle className="flex gap-2 items-center">
@@ -139,27 +186,27 @@ export default function CropDiagnosis() {
             </CardHeader>
 
             <CardContent className="space-y-4">
-
               <input
                 type="file"
                 ref={fileInputRef}
                 onChange={handleImageSelect}
-                accept="image/*"
+                accept="image/jpeg,image/png"
                 className="hidden"
               />
 
               {!selectedImage ? (
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed p-8 text-center rounded-lg cursor-pointer hover:border-primary/50"
+                  className="border-2 border-dashed p-8 text-center rounded-lg cursor-pointer hover:border-primary/50 transition"
                 >
                   <ImageIcon className="mx-auto h-10 w-10 mb-2 opacity-50" />
-                  Click to upload
+                  <p className="text-sm text-muted-foreground">Click to upload</p>
                 </div>
               ) : (
                 <div className="relative">
                   <img
                     src={selectedImage}
+                    alt="Selected crop leaf"
                     className="w-full h-64 object-cover rounded"
                   />
                   <Button
@@ -191,7 +238,7 @@ export default function CropDiagnosis() {
                   {analyzing ? (
                     <>
                       <Loader2 className="animate-spin mr-2 h-4 w-4" />
-                      Analyzing...
+                      Analyzing with Gemini AI...
                     </>
                   ) : (
                     <>
@@ -204,7 +251,7 @@ export default function CropDiagnosis() {
             </CardContent>
           </Card>
 
-          {/* RESULT */}
+          {/* Diagnosis Card */}
           <Card>
             <CardHeader>
               <CardTitle>Diagnosis</CardTitle>
@@ -214,41 +261,73 @@ export default function CropDiagnosis() {
               {analyzing ? (
                 <div className="text-center py-10">
                   <Loader2 className="animate-spin h-10 w-10 mx-auto mb-3" />
-                  Analyzing crop...
+                  <p>Analyzing crop image...</p>
                 </div>
               ) : !diagnosis ? (
-                <p className="text-muted-foreground text-center">
-                  No analysis yet
+                <p className="text-muted-foreground text-center py-10">
+                  No analysis yet. Upload an image and click "Analyze".
                 </p>
               ) : (
                 <div className="space-y-4">
-
-                  {/* BASIC INFO */}
+                  {/* Basic Information Grid */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-sm">Crop</p>
+                      <p className="text-sm text-muted-foreground">Crop</p>
                       <p className="font-bold">{diagnosis.crop}</p>
                     </div>
-
                     <div>
-                      <p className="text-sm">Disease</p>
+                      <p className="text-sm text-muted-foreground">Disease</p>
                       <p className="font-bold">{diagnosis.disease}</p>
                     </div>
-
                     <div>
-                      <p className="text-sm">Severity</p>
-                      <Badge>{label(diagnosis.severity)}</Badge>
+                      <p className="text-sm text-muted-foreground">Severity</p>
+                      <Badge
+                        variant={
+                          diagnosis.severity === "high"
+                            ? "destructive"
+                            : diagnosis.severity === "medium"
+                            ? "default"
+                            : "secondary"
+                        }
+                      >
+                        {label(diagnosis.severity)}
+                      </Badge>
                     </div>
-
                     <div>
-                      <p className="text-sm">Confidence</p>
-                      <Badge>{diagnosis.confidence}%</Badge>
+                      <p className="text-sm text-muted-foreground">Confidence</p>
+                      <Badge
+                        variant={
+                          diagnosis.confidence > 85
+                            ? "default"
+                            : diagnosis.confidence > 70
+                            ? "secondary"
+                            : "outline"
+                        }
+                      >
+                        {diagnosis.confidence}%
+                      </Badge>
                     </div>
+                    {diagnosis.spread_risk && (
+                      <div className="col-span-2">
+                        <p className="text-sm text-muted-foreground">Spread Risk</p>
+                        <Badge
+                          variant={
+                            diagnosis.spread_risk === "high"
+                              ? "destructive"
+                              : diagnosis.spread_risk === "medium"
+                              ? "default"
+                              : "secondary"
+                          }
+                        >
+                          {label(diagnosis.spread_risk)}
+                        </Badge>
+                      </div>
+                    )}
                   </div>
 
                   <Separator />
 
-                  {/* DETAILS */}
+                  {/* Analysis Details */}
                   <div>
                     <h3 className="font-semibold mb-1">Analysis</h3>
                     <p className="text-sm text-muted-foreground">
@@ -256,27 +335,69 @@ export default function CropDiagnosis() {
                     </p>
                   </div>
 
-                  {/* TREATMENT */}
-                  <div>
-                    <h3 className="font-semibold mb-1">Treatment</h3>
-                    <ul className="text-sm space-y-1">
-                      {list(diagnosis.treatment)}
-                    </ul>
-                  </div>
+                  {/* Treatments */}
+                  {(diagnosis.organic_treatment?.length > 0 ||
+                    diagnosis.conventional_treatment?.length > 0) && (
+                    <div>
+                      <h3 className="font-semibold mb-2">Treatments</h3>
+                      {diagnosis.organic_treatment?.length > 0 && (
+                        <div className="mb-4">
+                          <h4 className="font-medium text-green-700 mb-1 flex items-center gap-1">
+                            🌿 Organic
+                          </h4>
+                          <ul className="space-y-1 ml-4">
+                            {renderList(diagnosis.organic_treatment)}
+                          </ul>
+                        </div>
+                      )}
+                      {diagnosis.conventional_treatment?.length > 0 && (
+                        <div>
+                          <h4 className="font-medium text-blue-700 mb-1 flex items-center gap-1">
+                            🔬 Conventional
+                          </h4>
+                          <ul className="space-y-1 ml-4">
+                            {renderList(diagnosis.conventional_treatment)}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
-                  {/* PREVENTION */}
-                  <div>
-                    <h3 className="font-semibold mb-1">Prevention</h3>
-                    <ul className="text-sm space-y-1">
-                      {list(diagnosis.prevention)}
-                    </ul>
-                  </div>
+                  {/* Prevention */}
+                  {diagnosis.prevention?.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold mb-1">Prevention</h3>
+                      <ul className="space-y-1">{renderList(diagnosis.prevention)}</ul>
+                    </div>
+                  )}
 
+                  {/* Monitoring Steps */}
+                  {diagnosis.monitoring_steps?.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold mb-1">Monitoring</h3>
+                      <ul className="space-y-1">{renderList(diagnosis.monitoring_steps)}</ul>
+                    </div>
+                  )}
+
+                  {/* Recovery Outlook */}
+                  {diagnosis.recovery_outlook && (
+                    <div className="p-3 bg-muted rounded-lg">
+                      <h3 className="font-semibold mb-1">Recovery Outlook</h3>
+                      <p className="text-sm">{diagnosis.recovery_outlook}</p>
+                    </div>
+                  )}
+
+                  {/* API Error Note */}
+                  {apiError && (
+                    <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 p-2 rounded">
+                      <AlertCircle className="h-4 w-4" />
+                      <span>Error: {apiError}</span>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
           </Card>
-
         </div>
       </main>
 

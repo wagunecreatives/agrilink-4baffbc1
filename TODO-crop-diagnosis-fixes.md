@@ -65,14 +65,14 @@ Original fixes (now removed):
 2. `supabase functions deploy analyze-crop`
 3. Test upload (simple base64 now, no compression)
 
-**Status**: UI fixed ✅ | Real AI pending API key
+**Status**: ✅ GEMINI PRO ACTIVE - User confirmed API key added
 
 
-## FINAL INSTRUCTIONS
-1. Get free Gemini API key: https://aistudio.google.com/app/apikey
-2. **Supabase Dashboard** → Edge Functions → analyze-crop → Secrets → Add `GEMINI_API_KEY`
-3. Terminal: `supabase functions deploy analyze-crop`
-4. Test: `npm run dev` → CropDiagnosis page → Upload image
+## ✅ SETUP COMPLETE - Ready for Testing
+
+1. Run: `supabase functions deploy analyze-crop`
+2. Test: `npm run dev` → CropDiagnosis → Upload leaf image
+3. Expected: Real Gemini analysis (no fallback=true)
 
 ## QUICK REAL AI SETUP (2 mins)
 ```
