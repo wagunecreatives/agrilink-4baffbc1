@@ -1,37 +1,14 @@
-# Gemini API 404 Fix - Step-by-Step Tracker
+# TODO - Agrilink AI
 
-## Status: ✅ COMPLETE - Gemini 404 Fixed!
+## Farmer dashboard & notifications
+- [x] Inspect database types and AuthContext for farmer role + order/listing status fields
+- [x] Implement `src/pages/NotificationsForFarmer.tsx` (request cards with accept/decline)
+- [x] Implement `src/pages/MyProducts.tsx` (add/edit quantity+price, upload image, sold out)
+- [x] Update `src/pages/Dashboard.tsx` to show farmer welcome + quick stats + entry points
+- [ ] Update `src/pages/OrdersForFarmer.tsx` to match status system (Pending/Accepted/In Delivery/Completed)
+- [x] Add routes in `src/App.tsx` for notifications and my-products
+- [x] Update `src/components/layout/Navbar.tsx` with farmer-only links
+- [x] Run typecheck/build and smoke test dashboard routes
 
-### Step 1: [TODO] Create Progress Tracker
-- ✅ This file created
-- Next: Backend polish → Deploy → Test
 
-### Step 2: [✅] Backend Improvements
-- Minor polish skipped (not needed, deploy successful)
-- Robust base64 handling already present
 
-### Step 3: [✅] Deploy Edge Function
-```
-supabase functions deploy analyze-crop
-```
-✅ Deployed (no changes detected, using existing version w/ API key)
-
-### Step 4: [✅] Test Full Flow
-```
-npm run dev
-```
-- ✅ Dev server: http://localhost:8080/
-- Navigate to CropDiagnosis page
-- Upload image → Real Gemini AI diagnosis (fallback: false)
-- Network tab: Check /functions/v1/analyze-crop response
-
-### Step 5: [🔄] Verify Logs (Run after test)
-```
-supabase functions logs analyze-crop --latest
-```
-Expected: No 404 errors, successful Gemini calls
-
-### Step 6: [✅] Update TODO Files
-- Mark all Gemini todos complete
-
-## Success = No more 404, Real AI diagnosis 🎉

@@ -1,265 +1,320 @@
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Footer } from "@/components/layout/Footer";
 import { Navbar } from "@/components/layout/Navbar";
-import { ScrollReveal } from "@/components/ui/scroll-reveal";
+import { Footer } from "@/components/layout/Footer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Bell,
-  Brain,
-  ClipboardCheck,
-  CloudSun,
-  Loader2,
-  MessageSquare,
-  Microscope,
-  ShoppingCart,
-  Sprout,
-  TrendingUp,
-  Wheat,
-} from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScrollReveal } from "@/components/ui/scroll-reveal";
+import { Loader2, ShoppingCart, Sprout, TrendingUp, Bell, ThumbsDown, ThumbsUp } from "lucide-react";
+import { toast } from "sonner";
+import type { MarketListing, Order, Profile } from "@/types/database";
 
-const operations = [
-  {
-    title: "AI crop diagnosis",
-    href: "/crop-diagnosis",
-    icon: Microscope,
-    description: "Run richer disease analysis, treatment planning, and monitoring workflows.",
-  },
-  {
-    title: "Marketplace",
-    href: "/marketplace",
-    icon: ShoppingCart,
-    description: "Browse produce listings, demand signals, and selling opportunities.",
-  },
-  {
-    title: "Farming tips",
-    href: "/tips",
-    icon: Brain,
-    description: "Open curated guidance, seasonal advice, and smart farming recommendations.",
-  },
-  {
-    title: "Messages",
-    href: "/messages",
-    icon: MessageSquare,
-    description: "Stay close to buyers, partners, and field coordination updates.",
-  },
-];
+type OrderAction = "accept" | "decline";
 
-const modules = [
-  { label: "Diagnosis workspace", value: "Advanced", icon: ClipboardCheck },
-  { label: "Market readiness", value: "Live", icon: TrendingUp },
-  { label: "Farmer network", value: "Connected", icon: MessageSquare },
-  { label: "Advisory layer", value: "AI-backed", icon: Brain },
-];
+type OrderWithListing = Order & { listing?: MarketListing | null };
 
 export default function Dashboard() {
-  const { profile, roles, isAuthLoading } = useAuth();
+  const { profile, roles, isAuthLoading, user } = useAuth();
+  const navigate = useNavigate();
 
-  if (isAuthLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  const [loading, setLoading] = useState(false);
+  const [orders, setOrders] = useState<OrderWithListing[]>([]);
+  const [productCount, setProductCount] = useState(0);
+  const [earningsWeek, setEarningsWeek] = useState<number>(0);
+  const [buyerRequests, setBuyerRequests] = useState(0);
+
+  const isFarmer = roles.includes("farmer") || roles.includes("admin");
+
+  useEffect(() => {
+    if (isAuthLoading) return;
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+    if (!isFarmer) {
+      navigate("/marketplace");
+    }
+  }, [user, isAuthLoading, isFarmer, navigate]);
 
   const firstName = profile?.full_name?.split(" ")[0] || "Farmer";
-  const isFarmer = roles.includes("farmer") || roles.includes("admin");
+
+  const fetchDashboardData = async () => {
+    if (!user) return;
+    setLoading(true);
+
+    try {
+      // Products listed
+      const { data: listings, error: lErr } = await supabase
+        .from("market_listings")
+        .select("id")
+        .eq("seller_id", user.id);
+      if (lErr) throw lErr;
+      setProductCount((listings || []).length);
+
+      // Orders for farmer
+      const { data: ordersData, error: oErr } = await (supabase as any)
+        .from("orders")
+        .select(
+          "*, listing:market_listings(id, title, crop_type, quantity, unit, price, images, location, created_at)"
+        )
+        .eq("farmer_id", user.id);
+
+      if (oErr) throw oErr;
+
+      const mapped: OrderWithListing[] = (ordersData || []).map((row: any) => ({
+        ...(row as Order),
+        listing: row.listing ?? null,
+      }));
+
+      setOrders(mapped);
+
+      // Earnings this week: sum of total_price where delivered/completed (or delivered)
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      const earnings = mapped
+        .filter((o) => {
+          const delivered = o.status === "delivered";
+          const dt = new Date(o.created_at);
+          return delivered && dt >= weekAgo;
+        })
+        .reduce((sum, o) => sum + (o.total_price || 0), 0);
+      setEarningsWeek(earnings);
+
+      // New requests: pending orders
+      setBuyerRequests(mapped.filter((o) => o.status === "pending").length);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Failed to load dashboard");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!user || !isFarmer) return;
+    fetchDashboardData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, isFarmer]);
+
+  const activeOrders = useMemo(() => {
+    return orders.filter((o) => o.status !== "cancelled");
+  }, [orders]);
+
+  const newRequestOrders = useMemo(() => {
+    return orders.filter((o) => o.status === "pending").slice(0, 4);
+  }, [orders]);
+
+  const callUpdateOrderResponse = async (order: OrderWithListing, action: OrderAction) => {
+    if (!user) throw new Error("Not authenticated");
+
+    const session = await (supabase as any).auth.getSession();
+    const accessToken = session.data.session?.access_token;
+
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/update-order-response`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify({ orderId: order.id, action }),
+    });
+
+    const json = await res.json();
+    if (!res.ok) throw new Error(json?.error || "Failed");
+    return json?.order as Order;
+  };
+
+  const onAccept = async (order: OrderWithListing) => {
+    try {
+      await callUpdateOrderResponse(order, "accept");
+      await fetchDashboardData();
+      toast.success("Request accepted");
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Failed to accept");
+    }
+  };
+
+  const onDecline = async (order: OrderWithListing) => {
+    try {
+      await callUpdateOrderResponse(order, "decline");
+      await fetchDashboardData();
+      toast.success("Request declined");
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Failed to decline");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <main className="pb-20">
-        <section className="hero-mesh surface-grid">
-          <div className="container py-12 md:py-16">
-            <ScrollReveal>
-              <div className="glass-strong rounded-[2rem] p-8 md:p-10">
-                <div className="flex flex-wrap items-center gap-3">
-                  <Badge variant="secondary">Operations dashboard</Badge>
-                  <Badge variant="outline">Smarter workflow routing</Badge>
-                </div>
-                <div className="mt-6 grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
-                  <div className="space-y-4">
-                    <h1 className="text-4xl font-bold md:text-5xl">
-                      Welcome back, {firstName}. Your farm operations hub is ready.
-                    </h1>
-                    <p className="max-w-2xl text-lg text-muted-foreground">
-                      Move between diagnosis, market actions, messaging, and advisory guidance
-                      from a tighter dashboard with clearer routing and richer operational context.
-                    </p>
-                    <div className="flex flex-wrap gap-3">
-                      <Button className="gradient-hero text-primary-foreground" asChild>
-                        <Link to="/crop-diagnosis">Open diagnosis workspace</Link>
-                      </Button>
-                      <Button variant="outline" asChild>
-                        <Link to="/marketplace">Browse marketplace</Link>
-                      </Button>
-                    </div>
-                  </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    {modules.map((item) => (
-                      <Card key={item.label} className="glass card-lift">
-                        <CardContent className="p-5">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-sm text-muted-foreground">{item.label}</p>
-                              <p className="mt-2 text-2xl font-bold">{item.value}</p>
-                            </div>
-                            <div className="rounded-full bg-primary/10 p-3 text-primary">
-                              <item.icon className="h-5 w-5" />
+      <main className="pb-16">
+        <section className="container py-10 md:py-14">
+          <ScrollReveal>
+            <div className="space-y-4">
+              <h1 className="text-4xl font-bold md:text-5xl">
+                Good Morning, {firstName} 👋
+              </h1>
+              <p className="text-muted-foreground max-w-2xl">
+                Your farmer dashboard with requests, orders, and operational notifications in one place.
+              </p>
+
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mt-6">
+                <Card className="glass-strong rounded-[1.5rem]">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Sprout className="h-4 w-4 text-primary" /> Products Listed
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-3xl font-bold">{productCount} </p>
+                  </CardContent>
+                </Card>
+
+                <Card className="glass-strong rounded-[1.5rem]">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <ShoppingCart className="h-4 w-4 text-primary" /> Active Orders
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-3xl font-bold">{activeOrders.length}</p>
+                  </CardContent>
+                </Card>
+
+                <Card className="glass-strong rounded-[1.5rem]">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <TrendingUp className="h-4 w-4 text-primary" /> Earnings This Week
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-3xl font-bold">KSh {Math.round(earningsWeek).toLocaleString()}</p>
+                  </CardContent>
+                </Card>
+
+                <Card className="glass-strong rounded-[1.5rem]">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Bell className="h-4 w-4 text-primary" /> New Requests
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-3xl font-bold">{buyerRequests}</p>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </ScrollReveal>
+
+          <div className="mt-10 grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
+            <ScrollReveal delayMs={80}>
+              <Card className="glass-strong rounded-[1.75rem]">
+                <CardHeader>
+                  <CardTitle>New buyer requests</CardTitle>
+                  <CardContent className="p-0" />
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {loading ? (
+                    <div className="flex items-center justify-center py-10">
+                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    </div>
+                  ) : newRequestOrders.length === 0 ? (
+                    <div className="text-muted-foreground">No new requests right now.</div>
+                  ) : (
+                    newRequestOrders.map((order) => (
+                      <div key={order.id} className="rounded-2xl border border-border/70 bg-white/70 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm text-muted-foreground">Request</p>
+                            <h3 className="text-xl font-bold mt-1">
+                              {order.listing?.crop_type ? "🍅" : "🛎️"} {order.listing?.title ?? "Product"}
+                            </h3>
+                            <div className="text-sm text-muted-foreground mt-2 space-y-1">
+                              <div>
+                                Buyer needs: {order.quantity} {order.listing?.unit ?? "kg"}
+                              </div>
+                              <div>Location: {order.listing?.location ?? "Nairobi"}</div>
+                              <div>Budget: KSh {Math.round(order.total_price).toLocaleString()}</div>
+                              <div>Delivery: Pickup</div>
                             </div>
                           </div>
-                        </CardContent>
-                      </Card>
-                    ))}
+                          <Badge variant="outline">Pending</Badge>
+                        </div>
+
+                        <div className="flex gap-2 mt-4">
+                          <Button variant="outline" onClick={() => onDecline(order)}>
+                            <ThumbsDown className="h-4 w-4 mr-2" /> Decline
+                          </Button>
+                          <Button onClick={() => onAccept(order)}>
+                            <ThumbsUp className="h-4 w-4 mr-2" /> Accept
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+
+                  <div className="pt-2">
+                    <Button variant="secondary" asChild className="w-full">
+                      <Link to="/notifications">View all notifications</Link>
+                    </Button>
                   </div>
-                </div>
+                </CardContent>
+              </Card>
+            </ScrollReveal>
+
+            <ScrollReveal delayMs={160}>
+              <div className="space-y-4">
+                <Card className="glass rounded-[1.5rem]">
+                  <CardHeader>
+                    <CardTitle>Active orders</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      Manage negotiation and fulfillment progress.
+                    </p>
+                    <Button asChild className="w-full" variant="outline">
+                      <Link to="/orders/farmer">Open orders</Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card className="glass rounded-[1.5rem]">
+                  <CardHeader>
+                    <CardTitle>Notifications</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-sm text-muted-foreground">Requests, interested buyers, price alerts and delivery updates.</p>
+                    <Button asChild className="w-full">
+                      <Link to="/notifications">Go to notifications</Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card className="glass rounded-[1.5rem]">
+                  <CardHeader>
+                    <CardTitle>My products</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-sm text-muted-foreground">Update quantities, pricing and availability.</p>
+                    <Button asChild className="w-full" variant="outline">
+                      <Link to="/my-products">Manage products</Link>
+                    </Button>
+                  </CardContent>
+                </Card>
               </div>
             </ScrollReveal>
           </div>
         </section>
-
-        <section className="container -mt-8 space-y-8">
-          <ScrollReveal delayMs={80}>
-            <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-              <Card className="glass-strong rounded-[1.75rem]">
-                <CardHeader>
-                  <CardTitle>Quick operations</CardTitle>
-                  <CardDescription>
-                    Jump into the high-value actions that already exist in the product.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-4 md:grid-cols-2">
-                  {operations.map((item) => (
-                    <Link key={item.href} to={item.href}>
-                      <Card className="card-lift h-full border-border/60 bg-white/75 shadow-none">
-                        <CardHeader className="pb-3">
-                          <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary">
-                            <item.icon className="h-5 w-5" />
-                          </div>
-                          <CardTitle className="text-lg">{item.title}</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <CardDescription className="text-sm">{item.description}</CardDescription>
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  ))}
-                </CardContent>
-              </Card>
-
-              <Card className="glass rounded-[1.75rem]">
-                <CardHeader>
-                  <CardTitle>Current focus areas</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {[
-                    "Use the diagnosis workspace for richer treatment and monitoring plans.",
-                    "Keep market listings updated with clean photos and accurate pricing.",
-                    "Use messages for buyer follow-up and supply coordination.",
-                    "Review farming tips regularly for preventive actions and seasonal planning.",
-                  ].map((item) => (
-                    <div key={item} className="flex gap-3 rounded-2xl border border-border/70 bg-white/70 p-4">
-                      <Sprout className="mt-0.5 h-4 w-4 text-success" />
-                      <span className="text-sm">{item}</span>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            </div>
-          </ScrollReveal>
-
-          <ScrollReveal delayMs={160}>
-            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-              {[
-                {
-                  title: "Advisory readiness",
-                  value: "95%",
-                  note: "Better routing into diagnosis, monitoring, and action planning.",
-                  icon: Brain,
-                },
-                {
-                  title: "Market visibility",
-                  value: isFarmer ? "Seller" : "Buyer",
-                  note: "Marketplace access is connected directly from dashboard actions.",
-                  icon: ShoppingCart,
-                },
-                {
-                  title: "Weather awareness",
-                  value: "Ready",
-                  note: "Use farming tips and crop diagnosis notes to react to stress signals faster.",
-                  icon: CloudSun,
-                },
-                {
-                  title: "Collaboration",
-                  value: "Live",
-                  note: "Messages and alerts remain one click away for field coordination.",
-                  icon: Bell,
-                },
-              ].map((item) => (
-                <Card key={item.title} className="glass card-lift rounded-[1.5rem]">
-                  <CardContent className="p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm text-muted-foreground">{item.title}</p>
-                        <p className="mt-2 text-3xl font-bold">{item.value}</p>
-                        <p className="mt-2 text-sm text-muted-foreground">{item.note}</p>
-                      </div>
-                      <div className="rounded-full bg-primary/10 p-3 text-primary">
-                        <item.icon className="h-5 w-5" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </ScrollReveal>
-
-          <ScrollReveal delayMs={220}>
-            <Card className="glass-strong rounded-[1.75rem]">
-              <CardHeader>
-                <CardTitle>Role-aware command deck</CardTitle>
-                <CardDescription>
-                  The dashboard now points only to real routes, with clearer actions for active users.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-3">
-                <Card className="border-border/60 bg-white/75 shadow-none">
-                  <CardContent className="p-5">
-                    <Wheat className="mb-3 h-6 w-6 text-primary" />
-                    <h3 className="font-semibold">Production decisions</h3>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Diagnose disease pressure, capture notes, and monitor follow-up actions.
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card className="border-border/60 bg-white/75 shadow-none">
-                  <CardContent className="p-5">
-                    <TrendingUp className="mb-3 h-6 w-6 text-primary" />
-                    <h3 className="font-semibold">Market actions</h3>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Move from diagnosis into selling and buyer communication without dead links.
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card className="border-border/60 bg-white/75 shadow-none">
-                  <CardContent className="p-5">
-                    <Microscope className="mb-3 h-6 w-6 text-primary" />
-                    <h3 className="font-semibold">AI workflow</h3>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Richer AI response fields now support better recommendations and field planning.
-                    </p>
-                  </CardContent>
-                </Card>
-              </CardContent>
-            </Card>
-          </ScrollReveal>
-        </section>
       </main>
+
       <Footer />
     </div>
   );
 }
+

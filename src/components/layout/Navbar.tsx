@@ -21,8 +21,16 @@ const navLinks = [
   { href: "/about", label: "About", icon: User },
 ];
 
+const farmerLinks = [
+  { href: "/notifications", label: "Notifications" },
+  { href: "/my-products", label: "My Products" },
+  { href: "/orders/farmer", label: "Active Orders" },
+];
+
+
 export function Navbar() {
   const { user, profile, signOut, isApprovedFarmer } = useAuth();
+
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -92,6 +100,22 @@ export function Navbar() {
                     <span>{link.label}</span>
                   </Link>
                 ))}
+
+                {isApprovedFarmer && (
+                  <>
+                    {farmerLinks.map((link) => (
+                      <Link
+                        key={link.href}
+                        to={link.href}
+                        onClick={() => setMobileOpen(false)}
+                        className="flex items-center gap-3 rounded-2xl border border-border/70 px-4 py-3"
+                      >
+                        <span>{link.label}</span>
+                      </Link>
+                    ))}
+                  </>
+                )}
+
                 <Link
                   to={user ? "/dashboard" : "/login"}
                   onClick={() => setMobileOpen(false)}
@@ -100,6 +124,7 @@ export function Navbar() {
                   <LayoutDashboard className="h-4 w-4 text-primary" />
                   <span>{user ? "Dashboard" : "Sign in"}</span>
                 </Link>
+
               </div>
             </SheetContent>
           </Sheet>

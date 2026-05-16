@@ -19,7 +19,13 @@ const CreateListing = lazy(() => import("./pages/CreateListing"));
 const CropDiagnosis = lazy(() => import("./pages/CropDiagnosis"));
 const FarmingTips = lazy(() => import("./pages/FarmingTips"));
 const DirectMessages = lazy(() => import("./pages/DirectMessages"));
+const OrdersForFarmer = lazy(() => import("./pages/OrdersForFarmer"));
+const OrdersForCustomer = lazy(() => import("./pages/OrdersForCustomer"));
+const NotificationsForFarmer = lazy(() => import("./pages/NotificationsForFarmer"));
+const MyProducts = lazy(() => import("./pages/MyProducts"));
+
 const NotFound = lazy(() => import("./pages/NotFound"));
+
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -44,8 +50,24 @@ const App = () => (
               <Route
                 path="/marketplace/new"
                 element={
-                  <ProtectedRoute requiredRole="farmer">
+                  <ProtectedRoute requiredRoles={["farmer"]}>
                     <CreateListing />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/orders/farmer"
+                element={
+                  <ProtectedRoute requiredRoles={["farmer"]}>
+                    <OrdersForFarmer />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/orders"
+                element={
+                  <ProtectedRoute>
+                    <OrdersForCustomer />
                   </ProtectedRoute>
                 }
               />
@@ -54,6 +76,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <Dashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/notifications"
+                element={
+                  <ProtectedRoute requiredRoles={["farmer"]}>
+                    <NotificationsForFarmer />
                   </ProtectedRoute>
                 }
               />
@@ -75,7 +105,14 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route
+                path="/my-products"
+                element={
+                  <ProtectedRoute requiredRoles={["farmer"]}>
+                    <MyProducts />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
@@ -86,3 +123,4 @@ const App = () => (
 );
 
 export default App;
+
