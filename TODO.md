@@ -1,14 +1,11 @@
-# TODO - Agrilink AI
+# TODO
 
-## Farmer dashboard & notifications
-- [x] Inspect database types and AuthContext for farmer role + order/listing status fields
-- [x] Implement `src/pages/NotificationsForFarmer.tsx` (request cards with accept/decline)
-- [x] Implement `src/pages/MyProducts.tsx` (add/edit quantity+price, upload image, sold out)
-- [x] Update `src/pages/Dashboard.tsx` to show farmer welcome + quick stats + entry points
-- [ ] Update `src/pages/OrdersForFarmer.tsx` to match status system (Pending/Accepted/In Delivery/Completed)
-- [x] Add routes in `src/App.tsx` for notifications and my-products
-- [x] Update `src/components/layout/Navbar.tsx` with farmer-only links
-- [x] Run typecheck/build and smoke test dashboard routes
-
-
+## Dashboard role-based access
+- [ ] Update `src/pages/Dashboard.tsx` to render farmer vs customer dashboards based on `roles`.
+- [ ] Remove/adjust redirect to `/marketplace` for non-farmers.
+- [ ] For customers: query orders with `customer_id = user.id`.
+- [ ] For customers: show order status (pending/accepted/declined/etc.) and allow viewing what happened (no accept/decline buttons).
+- [ ] Add customer button "Chart Me" that opens the farmer chart/diagnosis UI in the system (route to be determined/implemented).
+- [ ] Ensure farmer dashboard still functions (accept/decline calls and analytics).
+- [ ] Smoke-test by logging in as customer and farmer.
 

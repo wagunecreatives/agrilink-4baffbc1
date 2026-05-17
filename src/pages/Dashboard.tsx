@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Navbar } from "@/components/layout/Navbar";
@@ -32,35 +33,45 @@ export default function Dashboard() {
     if (isAuthLoading) return;
     if (!user) {
       navigate("/login");
-      return;
     }
-    if (!isFarmer) {
-      navigate("/marketplace");
-    }
-  }, [user, isAuthLoading, isFarmer, navigate]);
+  }, [user, isAuthLoading, navigate]);
+
+  const isCustomer = roles.includes("customer");
 
   const firstName = profile?.full_name?.split(" ")[0] || "Farmer";
 
+
   const fetchDashboardData = async () => {
+
     if (!user) return;
+
     setLoading(true);
 
     try {
-      // Products listed
-      const { data: listings, error: lErr } = await supabase
-        .from("market_listings")
-        .select("id")
-        .eq("seller_id", user.id);
-      if (lErr) throw lErr;
-      setProductCount((listings || []).length);
+      // Customer dashboards rely on orders.customer_id.
+      // Farmer dashboards rely on orders.farmer_id.
+      const isFarmerDashboard = isFarmer;
 
-      // Orders for farmer
+
+
+      // Products listed (farmer only)
+      if (isFarmerDashboard) {
+        const { data: listings, error: lErr } = await supabase
+          .from("market_listings")
+          .select("id")
+          .eq("seller_id", user.id);
+        if (lErr) throw lErr;
+        setProductCount((listings || []).length);
+      } else {
+        setProductCount(0);
+      }
+
       const { data: ordersData, error: oErr } = await (supabase as any)
         .from("orders")
         .select(
           "*, listing:market_listings(id, title, crop_type, quantity, unit, price, images, location, created_at)"
         )
-        .eq("farmer_id", user.id);
+        .eq(isFarmerDashboard ? "farmer_id" : "customer_id", user.id);
 
       if (oErr) throw oErr;
 
@@ -71,19 +82,23 @@ export default function Dashboard() {
 
       setOrders(mapped);
 
-      // Earnings this week: sum of total_price where delivered/completed (or delivered)
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      const earnings = mapped
-        .filter((o) => {
-          const delivered = o.status === "delivered";
-          const dt = new Date(o.created_at);
-          return delivered && dt >= weekAgo;
-        })
-        .reduce((sum, o) => sum + (o.total_price || 0), 0);
-      setEarningsWeek(earnings);
+      // Farmer earnings
+      if (isFarmerDashboard) {
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        const earnings = mapped
+          .filter((o) => {
+            const delivered = o.status === "delivered";
+            const dt = new Date(o.created_at);
+            return delivered && dt >= weekAgo;
+          })
+          .reduce((sum, o) => sum + (o.total_price || 0), 0);
+        setEarningsWeek(earnings);
+      } else {
+        setEarningsWeek(0);
+      }
 
-      // New requests: pending orders
+      // New/pending (both roles)
       setBuyerRequests(mapped.filter((o) => o.status === "pending").length);
     } catch (e: any) {
       console.error(e);
@@ -93,11 +108,13 @@ export default function Dashboard() {
     }
   };
 
+
   useEffect(() => {
-    if (!user || !isFarmer) return;
+    if (!user) return;
     fetchDashboardData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, isFarmer]);
+  }, [user?.id, isFarmer, isCustomer]);
+
 
   const activeOrders = useMemo(() => {
     return orders.filter((o) => o.status !== "cancelled");
@@ -119,13 +136,21 @@ export default function Dashboard() {
         "Content-Type": "application/json",
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
+      // Send body as JSON; server-side expects req.json()
       body: JSON.stringify({ orderId: order.id, action }),
     });
 
-    const json = await res.json();
-    if (!res.ok) throw new Error(json?.error || "Failed");
-    return json?.order as Order;
+    // Server may return JSON error or plain string; handle both safely.
+    const contentType = res.headers.get("content-type") || "";
+    const json = contentType.includes("application/json") ? await res.json() : null;
+
+    if (!res.ok) {
+      throw new Error(json?.error || `Request failed with status ${res.status}`);
+    }
+
+    return (json?.order ?? json?.data?.order) as Order;
   };
+
 
   const onAccept = async (order: OrderWithListing) => {
     try {
@@ -149,6 +174,24 @@ export default function Dashboard() {
     }
   };
 
+  const customerOrders = useMemo(() => {
+    if (!isCustomer) return [];
+    return orders;
+  }, [orders, isCustomer]);
+
+  const customerLatestResponse = useMemo(() => {
+    if (!isCustomer) return null;
+    return orders.find((o) => o.status === "confirmed" || o.status === "cancelled") ?? null;
+  }, [orders, isCustomer]);
+
+  const statusBadge = (status: Order["status"]) => {
+    if (status === "confirmed") return { text: "Accepted", variant: "default" as const };
+    if (status === "cancelled") return { text: "Declined", variant: "destructive" as const };
+    if (status === "pending") return { text: "Pending", variant: "secondary" as const };
+    if (status === "delivered") return { text: "Delivered", variant: "outline" as const };
+    return { text: status, variant: "secondary" as const };
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -160,54 +203,101 @@ export default function Dashboard() {
               <h1 className="text-4xl font-bold md:text-5xl">
                 Good Morning, {firstName} 👋
               </h1>
+
               <p className="text-muted-foreground max-w-2xl">
-                Your farmer dashboard with requests, orders, and operational notifications in one place.
+                {isFarmer
+                  ? "Your farmer dashboard with requests, orders, and operational notifications in one place."
+                  : "Your customer dashboard to track farmer responses and order status."}
               </p>
 
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mt-6">
-                <Card className="glass-strong rounded-[1.5rem]">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <Sprout className="h-4 w-4 text-primary" /> Products Listed
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-3xl font-bold">{productCount} </p>
-                  </CardContent>
-                </Card>
-
-                <Card className="glass-strong rounded-[1.5rem]">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <ShoppingCart className="h-4 w-4 text-primary" /> Active Orders
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-3xl font-bold">{activeOrders.length}</p>
-                  </CardContent>
-                </Card>
-
-                <Card className="glass-strong rounded-[1.5rem]">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <TrendingUp className="h-4 w-4 text-primary" /> Earnings This Week
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-3xl font-bold">KSh {Math.round(earningsWeek).toLocaleString()}</p>
-                  </CardContent>
-                </Card>
-
-                <Card className="glass-strong rounded-[1.5rem]">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <Bell className="h-4 w-4 text-primary" /> New Requests
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-3xl font-bold">{buyerRequests}</p>
-                  </CardContent>
-                </Card>
+                {isFarmer ? (
+                  <>
+                    <Card className="glass-strong rounded-[1.5rem]">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <Sprout className="h-4 w-4 text-primary" /> Products Listed
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-3xl font-bold">{productCount}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="glass-strong rounded-[1.5rem]">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <ShoppingCart className="h-4 w-4 text-primary" /> Active Orders
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-3xl font-bold">{activeOrders.length}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="glass-strong rounded-[1.5rem]">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <TrendingUp className="h-4 w-4 text-primary" /> Earnings This Week
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-3xl font-bold">KSh {Math.round(earningsWeek).toLocaleString()}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="glass-strong rounded-[1.5rem]">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <Bell className="h-4 w-4 text-primary" /> New Requests
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-3xl font-bold">{buyerRequests}</p>
+                      </CardContent>
+                    </Card>
+                  </>
+                ) : (
+                  <>
+                    <Card className="glass-strong rounded-[1.5rem]">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <ShoppingCart className="h-4 w-4 text-primary" /> My Orders
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-3xl font-bold">{customerOrders.length}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="glass-strong rounded-[1.5rem]">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <Bell className="h-4 w-4 text-primary" /> Pending
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-3xl font-bold">{buyerRequests}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="glass-strong rounded-[1.5rem]">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <TrendingUp className="h-4 w-4 text-primary" /> Last Response
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-3xl font-bold">{customerLatestResponse ? "Done" : "-"}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="glass-strong rounded-[1.5rem]">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <Sprout className="h-4 w-4 text-primary" /> AI Diagnosis
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-3xl font-bold">Ready</p>
+                      </CardContent>
+                    </Card>
+                  </>
+                )}
               </div>
             </div>
           </ScrollReveal>
@@ -216,7 +306,7 @@ export default function Dashboard() {
             <ScrollReveal delayMs={80}>
               <Card className="glass-strong rounded-[1.75rem]">
                 <CardHeader>
-                  <CardTitle>New buyer requests</CardTitle>
+                  <CardTitle>{isFarmer ? "New buyer requests" : "Your order status"}</CardTitle>
                   <CardContent className="p-0" />
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -224,89 +314,175 @@ export default function Dashboard() {
                     <div className="flex items-center justify-center py-10">
                       <Loader2 className="h-8 w-8 animate-spin text-primary" />
                     </div>
-                  ) : newRequestOrders.length === 0 ? (
-                    <div className="text-muted-foreground">No new requests right now.</div>
-                  ) : (
-                    newRequestOrders.map((order) => (
-                      <div key={order.id} className="rounded-2xl border border-border/70 bg-white/70 p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-sm text-muted-foreground">Request</p>
-                            <h3 className="text-xl font-bold mt-1">
-                              {order.listing?.crop_type ? "🍅" : "🛎️"} {order.listing?.title ?? "Product"}
-                            </h3>
-                            <div className="text-sm text-muted-foreground mt-2 space-y-1">
-                              <div>
-                                Buyer needs: {order.quantity} {order.listing?.unit ?? "kg"}
+                  ) : isFarmer ? (
+                    newRequestOrders.length === 0 ? (
+                      <div className="text-muted-foreground">No new requests right now.</div>
+                    ) : (
+                      newRequestOrders.map((order) => (
+                        <div key={order.id} className="rounded-2xl border border-border/70 bg-white/70 p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm text-muted-foreground">Request</p>
+                              <h3 className="text-xl font-bold mt-1">
+                                {order.listing?.crop_type ? "🍅" : "🛎️"} {order.listing?.title ?? "Product"}
+                              </h3>
+                        <div className="text-sm text-muted-foreground mt-2 space-y-1">
+                                <div>
+                                  Buyer needs: {order.quantity} {order.listing?.unit ?? "kg"}
+                                </div>
+                                <div>Location: {order.listing?.location ?? "Nairobi"}</div>
+                                <div>Budget: KSh {Math.round(order.total_price).toLocaleString()}</div>
+                                <div>Delivery: Pickup</div>
                               </div>
-                              <div>Location: {order.listing?.location ?? "Nairobi"}</div>
-                              <div>Budget: KSh {Math.round(order.total_price).toLocaleString()}</div>
-                              <div>Delivery: Pickup</div>
                             </div>
+                            <Badge variant="outline">Pending</Badge>
                           </div>
-                          <Badge variant="outline">Pending</Badge>
-                        </div>
 
-                        <div className="flex gap-2 mt-4">
-                          <Button variant="outline" onClick={() => onDecline(order)}>
-                            <ThumbsDown className="h-4 w-4 mr-2" /> Decline
-                          </Button>
-                          <Button onClick={() => onAccept(order)}>
-                            <ThumbsUp className="h-4 w-4 mr-2" /> Accept
-                          </Button>
+                          <div className="flex gap-2 mt-4">
+                            <Button variant="outline" onClick={() => onDecline(order)}>
+                              <ThumbsDown className="h-4 w-4 mr-2" /> Decline
+                            </Button>
+                            <Button onClick={() => onAccept(order)}>
+                              <ThumbsUp className="h-4 w-4 mr-2" /> Accept
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    ))
+                      ))
+                    )
+                  ) : customerOrders.length === 0 ? (
+                    <div className="text-muted-foreground">You have no orders yet. Place one from the marketplace.</div>
+                  ) : (
+                    customerOrders.slice(0, 6).map((order) => {
+                      const badge = statusBadge(order.status);
+                      return (
+                        <div key={order.id} className="rounded-2xl border border-border/70 bg-white/70 p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm text-muted-foreground">Order</p>
+                              <h3 className="text-xl font-bold mt-1">{order.listing?.title ?? "Product"}</h3>
+                              <div className="text-sm text-muted-foreground mt-2 space-y-1">
+                                <div>
+                                  Qty: {order.quantity} {order.listing?.unit ?? "kg"}
+                                </div>
+                                <div>Budget: KSh {Math.round(order.total_price).toLocaleString()}</div>
+                                <div>Location: {order.listing?.location ?? "Nairobi"}</div>
+                              </div>
+                            </div>
+                            <Badge variant={badge.variant}>{badge.text}</Badge>
+                          </div>
+
+                          <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                            <Button variant="outline" asChild className="w-full sm:w-auto">
+                              <Link to="/orders">View all orders</Link>
+                            </Button>
+                            <Button
+                              asChild
+                              className="w-full sm:w-auto"
+                            >
+                              <Link to="/crop-diagnosis">Chart Me</Link>
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })
                   )}
 
-                  <div className="pt-2">
-                    <Button variant="secondary" asChild className="w-full">
-                      <Link to="/notifications">View all notifications</Link>
-                    </Button>
-                  </div>
+                  {isFarmer ? (
+                    <div className="pt-2">
+                      <Button variant="secondary" asChild className="w-full">
+                        <Link to="/notifications">View all notifications</Link>
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="pt-2">
+                      <Button variant="secondary" asChild className="w-full">
+                        <Link to="/orders">Go to orders</Link>
+                      </Button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </ScrollReveal>
 
             <ScrollReveal delayMs={160}>
               <div className="space-y-4">
-                <Card className="glass rounded-[1.5rem]">
-                  <CardHeader>
-                    <CardTitle>Active orders</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <p className="text-sm text-muted-foreground">
-                      Manage negotiation and fulfillment progress.
-                    </p>
-                    <Button asChild className="w-full" variant="outline">
-                      <Link to="/orders/farmer">Open orders</Link>
-                    </Button>
-                  </CardContent>
-                </Card>
+                {isFarmer ? (
+                  <>
+                    <Card className="glass rounded-[1.5rem]">
+                      <CardHeader>
+                        <CardTitle>Active orders</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <p className="text-sm text-muted-foreground">Manage negotiation and fulfillment progress.</p>
+                        <Button asChild className="w-full" variant="outline">
+                          <Link to="/orders/farmer">Open orders</Link>
+                        </Button>
+                      </CardContent>
+                    </Card>
 
-                <Card className="glass rounded-[1.5rem]">
-                  <CardHeader>
-                    <CardTitle>Notifications</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <p className="text-sm text-muted-foreground">Requests, interested buyers, price alerts and delivery updates.</p>
-                    <Button asChild className="w-full">
-                      <Link to="/notifications">Go to notifications</Link>
-                    </Button>
-                  </CardContent>
-                </Card>
+                    <Card className="glass rounded-[1.5rem]">
+                      <CardHeader>
+                        <CardTitle>Notifications</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <p className="text-sm text-muted-foreground">Requests, interested buyers, price alerts and delivery updates.</p>
+                        <Button asChild className="w-full">
+                          <Link to="/notifications">Go to notifications</Link>
+                        </Button>
+                      </CardContent>
+                    </Card>
 
-                <Card className="glass rounded-[1.5rem]">
-                  <CardHeader>
-                    <CardTitle>My products</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <p className="text-sm text-muted-foreground">Update quantities, pricing and availability.</p>
-                    <Button asChild className="w-full" variant="outline">
-                      <Link to="/my-products">Manage products</Link>
-                    </Button>
-                  </CardContent>
-                </Card>
+                    <Card className="glass rounded-[1.5rem]">
+                      <CardHeader>
+                        <CardTitle>My products</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <p className="text-sm text-muted-foreground">Update quantities, pricing and availability.</p>
+                        <Button asChild className="w-full" variant="outline">
+                          <Link to="/my-products">Manage products</Link>
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  </>
+                ) : (
+                  <>
+                    <Card className="glass rounded-[1.5rem]">
+                      <CardHeader>
+                        <CardTitle>Track responses</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <p className="text-sm text-muted-foreground">See when the farmer accepted or declined your order.</p>
+                        <Button asChild className="w-full" variant="outline">
+                          <Link to="/orders">Open orders</Link>
+                        </Button>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="glass rounded-[1.5rem]">
+                      <CardHeader>
+                        <CardTitle>Chart Me</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <p className="text-sm text-muted-foreground">Open the farmer chart/AI diagnosis workflow.</p>
+                        <Button asChild className="w-full">
+                          <Link to="/crop-diagnosis">Go to AI diagnosis</Link>
+                        </Button>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="glass rounded-[1.5rem]">
+                      <CardHeader>
+                        <CardTitle>Marketplace</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <p className="text-sm text-muted-foreground">Place new orders by browsing listings.</p>
+                        <Button asChild className="w-full" variant="outline">
+                          <Link to="/marketplace">Browse marketplace</Link>
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  </>
+                )}
               </div>
             </ScrollReveal>
           </div>
@@ -316,5 +492,6 @@ export default function Dashboard() {
       <Footer />
     </div>
   );
+
 }
 

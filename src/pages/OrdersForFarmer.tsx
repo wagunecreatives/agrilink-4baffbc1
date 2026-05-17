@@ -58,7 +58,7 @@ export default function OrdersForFarmer() {
       const q = (supabase as any)
         .from("orders")
         .select(
-          "*, listing:market_listings(id, title, crop_type, quantity, unit, price, images, location, created_at), customer:profiles(id, full_name, email, phone)"
+          "*, listing:market_listings(id, title, crop_type, quantity, unit, price, images, location, created_at)"
         )
         .eq("farmer_id", user.id)
         .order("created_at", { ascending: false });

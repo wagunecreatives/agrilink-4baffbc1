@@ -24,6 +24,7 @@ const navLinks = [
 const farmerLinks = [
   { href: "/notifications", label: "Notifications" },
   { href: "/my-products", label: "My Products" },
+  { href: "/orders", label: "My Orders" },
   { href: "/orders/farmer", label: "Active Orders" },
 ];
 
