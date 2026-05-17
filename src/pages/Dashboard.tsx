@@ -12,6 +12,9 @@ import { ScrollReveal } from "@/components/ui/scroll-reveal";
 import { Loader2, ShoppingCart, Sprout, TrendingUp, Bell, ThumbsDown, ThumbsUp } from "lucide-react";
 import { toast } from "sonner";
 import type { MarketListing, Order, Profile } from "@/types/database";
+import { useFarmerOrdersRealtime } from "@/hooks/useFarmerOrdersRealtime";
+
+
 
 type OrderAction = "accept" | "decline";
 
@@ -114,6 +117,16 @@ export default function Dashboard() {
     fetchDashboardData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, isFarmer, isCustomer]);
+
+  // Realtime updates for incoming buyer requests + status changes
+  useFarmerOrdersRealtime({
+    enabled: isFarmer,
+    farmerId: user?.id,
+    onChange: () => {
+      // Keep listing join accurate by refetching
+      fetchDashboardData();
+    },
+  });
 
 
   const activeOrders = useMemo(() => {
@@ -379,7 +392,7 @@ export default function Dashboard() {
                               asChild
                               className="w-full sm:w-auto"
                             >
-                              <Link to="/crop-diagnosis">Chart Me</Link>
+                              <Link to="/tips">Chart Me</Link>
                             </Button>
                           </div>
                         </div>

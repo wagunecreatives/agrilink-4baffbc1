@@ -1,11 +1,11 @@
-# TODO
+# TODO - Realtime Farmer Dashboard
 
-## Dashboard role-based access
-- [ ] Update `src/pages/Dashboard.tsx` to render farmer vs customer dashboards based on `roles`.
-- [ ] Remove/adjust redirect to `/marketplace` for non-farmers.
-- [ ] For customers: query orders with `customer_id = user.id`.
-- [ ] For customers: show order status (pending/accepted/declined/etc.) and allow viewing what happened (no accept/decline buttons).
-- [ ] Add customer button "Chart Me" that opens the farmer chart/diagnosis UI in the system (route to be determined/implemented).
-- [ ] Ensure farmer dashboard still functions (accept/decline calls and analytics).
-- [ ] Smoke-test by logging in as customer and farmer.
+## Plan
+- [ ] Add Supabase Realtime subscriptions for `orders` on the Farmer dashboard (`src/pages/Dashboard.tsx`).
+- [ ] On realtime events, refresh/merge the farmer’s orders so listing details stay correct.
+- [ ] Add the same realtime approach to `src/pages/OrdersForFarmer.tsx`.
+- [ ] Add the same realtime approach to `src/pages/NotificationsForFarmer.tsx`.
+- [ ] Ensure subscriptions filter by `farmer_id = current user id`.
+- [ ] Unsubscribe on unmount/user change.
+- [ ] Validate via manual testing: new customer order appears immediately; accept/decline updates immediately.
 

@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2, ThumbsDown, ThumbsUp } from "lucide-react";
 import { toast } from "sonner";
 import type { Order, MarketListing, Profile } from "@/types/database";
+import { useFarmerOrdersRealtime } from "@/hooks/useFarmerOrdersRealtime";
 
 type OrderAction = "accept" | "decline";
 
@@ -85,6 +86,15 @@ export default function OrdersForFarmer() {
     fetchOrders();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, isFarmer]);
+
+  // Realtime updates for incoming buyer requests + status changes
+  useFarmerOrdersRealtime({
+    enabled: isFarmer,
+    farmerId: user?.id,
+    onChange: () => {
+      fetchOrders();
+    },
+  });
 
   const fetchCustomerForOrder = async (order: OrderWithListing) => {
     setCustomerLoading(true);
