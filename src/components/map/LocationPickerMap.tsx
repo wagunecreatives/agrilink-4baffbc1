@@ -64,7 +64,9 @@ export function LocationPickerMap({
       {/* Keep the map visually in sync when `picked` changes from text input geocoding */}
       {/* react-leaflet will update center prop, but this ensures animation/actual move */}
       {/* eslint-disable-next-line react/no-children-prop */}
+      {/* Ensure the Leaflet panes stay below dropdown menus */}
       <MapContainer
+        className="z-0"
         center={center}
         zoom={zoom}
         scrollWheelZoom={false}

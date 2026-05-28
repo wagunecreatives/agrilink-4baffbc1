@@ -150,6 +150,15 @@
 }
 
 @layer utilities {
+  /* Make sure Leaflet map panes don't cover dropdown menus (z-index stacking) */
+  .leaflet-container {
+    z-index: 0;
+  }
+  /* shadcn/ui SelectContent uses fixed positioning inside portals; this is a fallback */
+  .select-content {
+    z-index: 50;
+  }
+
   .gradient-hero {
     background: var(--gradient-hero);
   }
