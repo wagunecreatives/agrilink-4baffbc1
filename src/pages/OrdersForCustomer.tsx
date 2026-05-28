@@ -45,8 +45,8 @@ export default function OrdersForCustomer() {
         const { data, error } = await (supabase as any)
           .from("orders")
           .select(
-            "id, customer_id, farmer_id, quantity, total_price, status, created_at, "+
-              "listing:market_listings(id, title, crop_type, quantity, unit, price, images, location, created_at)"
+"id, customer_id, farmer_id, quantity, total_price, status, created_at, "+
+              "listing:market_listings(id, title, crop_type, quantity, unit, price, images, location, latitude, longitude, created_at)"
           )
           .eq("customer_id", user.id)
           .order("created_at", { ascending: false });
