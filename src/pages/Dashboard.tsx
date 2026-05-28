@@ -214,7 +214,7 @@ export default function Dashboard() {
           <ScrollReveal>
             <div className="space-y-4">
               <h1 className="text-4xl font-bold md:text-5xl">
-                Good Morning, {firstName} 👋
+                Good Everning, {firstName} 👋
               </h1>
 
               <p className="text-muted-foreground max-w-2xl">
