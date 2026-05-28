@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -29,6 +29,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { ImageUpload } from './ImageUpload';
+import { LocationPickerMap } from '../map/LocationPickerMap';
+import { forwardGeocodeCountyVillage } from '@/lib/forwardGeocodeCountyVillage';
+
 
 // Updated Zod schema with images required
 const listingSchema = z.object({
@@ -38,9 +41,20 @@ const listingSchema = z.object({
   quantity: z.coerce.number().positive(),
   unit: z.string().min(1),
   price: z.coerce.number().positive(),
+
+  // Existing fallback
   location: z.string().min(2),
   images: z.array(z.string()).min(1, "At least one image is required"), // ✅ required
+
+  // GPS (optional)
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  county: z.string().optional(),
+  subcounty: z.string().optional(),
+  village: z.string().optional(),
+  ward: z.string().optional(),
 });
+
 
 type ListingFormData = z.infer<typeof listingSchema>;
 
@@ -72,9 +86,37 @@ export function CreateListingForm() {
       unit: 'kg',
       price: undefined,
       location: '',
+      county: '',
+      village: '',
       images: [],
     },
   });
+
+
+  useEffect(() => {
+    let active = true;
+
+    const county = form.getValues('county');
+    const village = form.getValues('village');
+
+    // Only forward-geocode when both are present
+    if (!county || !village) return;
+
+    // Avoid hammering Nominatim while the user is typing
+    const t = setTimeout(async () => {
+      const res = await forwardGeocodeCountyVillage(county, village);
+      if (!active) return;
+      if (!res) return;
+
+      form.setValue('latitude', res.lat, { shouldValidate: true });
+      form.setValue('longitude', res.lng, { shouldValidate: true });
+    }, 600);
+
+    return () => {
+      active = false;
+      clearTimeout(t);
+    };
+  }, [form, form.watch('county'), form.watch('village')]);
 
   const onSubmit = async (data: ListingFormData) => {
     if (!user) {
@@ -101,6 +143,15 @@ export function CreateListingForm() {
           unit: data.unit,
           price: data.price,
           location: data.location,
+
+          // GPS + area (optional)
+          latitude: data.latitude ?? null,
+          longitude: data.longitude ?? null,
+          county: data.county ?? null,
+          subcounty: data.subcounty ?? null,
+          village: data.village ?? null,
+          ward: data.ward ?? null,
+
           images: data.images, // validated by Zod
           status: 'active',
         });
@@ -184,45 +235,96 @@ export function CreateListingForm() {
             />
 
             <div className="grid sm:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="crop_type"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Crop Type</FormLabel>
-                    <Select onValueChange={field.onChange}>
+                <FormField
+                  control={form.control}
+                  name="crop_type"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Crop Type</FormLabel>
+                      <Select onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {cropTypes.map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {type}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="county"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>County</FormLabel>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select type" />
-                        </SelectTrigger>
+                        <Input placeholder="e.g. Siaya" {...field} />
                       </FormControl>
-                      <SelectContent>
-                        {cropTypes.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {type}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="village"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Village</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. Kobare" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+            <div className="space-y-2">
+              <div className="flex items-baseline justify-between gap-3">
+                <FormLabel className="m-0">Select Farm Location on Map</FormLabel>
+                <p className="text-xs text-muted-foreground">Click to drop a marker and save GPS coordinates.</p>
+              </div>
+
+              <LocationPickerMap
+                value={(() => {
+                  const lat = form.getValues('latitude');
+                  const lng = form.getValues('longitude');
+                  if (typeof lat === 'number' && typeof lng === 'number') {
+                    return { lat, lng };
+                  }
+                  return null;
+                })()}
+                onChange={(coords) => {
+                  if (!coords) {
+                    form.setValue('latitude', undefined, { shouldValidate: true });
+                    form.setValue('longitude', undefined, { shouldValidate: true });
+                    return;
+                  }
+                  form.setValue('latitude', Number(coords.lat), { shouldValidate: true });
+                  form.setValue('longitude', Number(coords.lng), { shouldValidate: true });
+                }}
+                onReverseGeocode={(r) => {
+                  if (!r) return;
+                  if (r.county) form.setValue('county', r.county, { shouldValidate: true });
+                  if (r.village) form.setValue('village', r.village, { shouldValidate: true });
+                }}
+                markerLabel="Farm location"
+                heightPx={260}
               />
 
-              <FormField
-                control={form.control}
-                name="location"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Location</FormLabel>
-                    <FormControl>
-                      <Input placeholder="City, Country" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+
             </div>
+
 
             <div className="grid sm:grid-cols-3 gap-4">
               <FormField

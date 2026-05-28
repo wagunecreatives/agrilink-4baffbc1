@@ -32,6 +32,7 @@ import {
   MessageSquare,
   Loader2,
   Package,
+  Navigation,
 } from "lucide-react";
 import {
   Carousel,
@@ -40,6 +41,8 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel";
+import { SmallMapWithMarker } from "@/components/map/SmallMapWithMarker";
+
 
 export default function ProductDetail() {
   const { id } = useParams<{ id: string }>();
@@ -231,6 +234,59 @@ export default function ProductDetail() {
   const isOwnListing = user?.id === listing.seller_id;
   const isAvailable = listing.status === "active";
 
+  const destLat = listing.latitude ?? seller?.latitude ?? null;
+  const destLng = listing.longitude ?? seller?.longitude ?? null;
+
+  const [buyerCoords, setBuyerCoords] = useState<{ lat: number; lng: number } | null>(null);
+
+  useEffect(() => {
+    if (destLat == null || destLng == null) return;
+
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setBuyerCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      () => {
+        // Permission denied or unavailable; just hide distance.
+        setBuyerCoords(null);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60_000 }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [destLat, destLng, id]);
+
+  const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const toRad = (v: number) => (v * Math.PI) / 180;
+    const R = 6371;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  const distanceKm =
+    buyerCoords && destLat != null && destLng != null
+      ? haversineKm(buyerCoords.lat, buyerCoords.lng, destLat, destLng)
+      : null;
+
+  const areaText =
+    listing.county || listing.subcounty || listing.village || listing.ward
+      ? [
+          listing.county || null,
+          listing.subcounty || null,
+          listing.village || null,
+          listing.ward || null,
+        ]
+          .filter(Boolean)
+          .join(", ")
+      : listing.location || null;
+
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
@@ -330,10 +386,19 @@ export default function ProductDetail() {
                       <strong>{listing.quantity}</strong> {listing.unit} available
                     </span>
                   </div>
+
                   <div className="flex items-center gap-2 text-sm">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span>{listing.location || "Location not specified"}</span>
+                    <span>
+                      {areaText || "Location not specified"}
+                      {distanceKm != null && destLat != null && destLng != null ? (
+                        <span className="text-xs text-muted-foreground ml-2">
+                          • {distanceKm.toFixed(1)} km away
+                        </span>
+                      ) : null}
+                    </span>
                   </div>
+
                   <div className="flex items-center gap-2 text-sm">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     <span>
@@ -341,6 +406,38 @@ export default function ProductDetail() {
                     </span>
                   </div>
                 </div>
+
+                {destLat != null && destLng != null ? (
+                  <div className="rounded-lg overflow-hidden border">
+                    <SmallMapWithMarker
+                      lat={destLat}
+                      lng={destLng}
+                      markerLabel={"Farm location"}
+                      heightPx={220}
+                    />
+                  </div>
+                ) : null}
+
+                {destLat != null && destLng != null ? (
+                  <div className="flex items-center gap-3">
+                    <Button
+                      asChild
+                      variant="outline"
+                      className="flex-1"
+                      disabled={destLat == null || destLng == null}
+                    >
+                      <a
+                        href={`https://www.google.com/maps/dir/?api=1&destination=${destLat},${destLng}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Navigation className="h-4 w-4 mr-2" />
+                        Get Directions
+                      </a>
+                    </Button>
+                  </div>
+                ) : null}
+
               </CardContent>
             </Card>
           </div>

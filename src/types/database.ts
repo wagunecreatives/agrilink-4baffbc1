@@ -12,7 +12,16 @@ export interface Profile {
   // Optional fields that may exist on some profiles
   phone?: string | null;
   location?: string | null;
+
+  // GPS coordinates + optional area fields
+  latitude?: number | null;
+  longitude?: number | null;
+  county?: string | null;
+  subcounty?: string | null;
+  village?: string | null;
+  ward?: string | null;
 }
+
 
 export interface UserRoleRecord {
   id: string;
@@ -76,6 +85,15 @@ export interface MarketListing {
   status: string;
   created_at: string;
   updated_at: string;
+
+  // GPS coordinates + optional area fields
+  latitude?: number | null;
+  longitude?: number | null;
+  county?: string | null;
+  subcounty?: string | null;
+  village?: string | null;
+  ward?: string | null;
+
   // Computed or optional fields for UI compatibility
   is_available?: boolean;
   price_per_unit?: number;
@@ -83,6 +101,7 @@ export interface MarketListing {
   farmer_id?: string;
   views_count?: number;
 }
+
 
 export interface Order {
   id: string;

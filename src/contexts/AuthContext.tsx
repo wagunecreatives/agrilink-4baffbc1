@@ -43,7 +43,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const userDataPromiseRef = useRef<Promise<void> | null>(null);
 
-  // Fetch profile + roles
+  // =========================
+  // FETCH USER DATA (PROFILE + ROLES)
+  // =========================
   async function fetchUserData(userId: string) {
     const [profileRes, rolesRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
@@ -52,6 +54,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (profileRes.error) throw profileRes.error;
     if (rolesRes.error) throw rolesRes.error;
+
+    // 🚨 CRITICAL: if profile is missing → treat as deleted user
+    if (!profileRes.data) {
+      throw new Error('Profile not found (user deleted or disabled)');
+    }
 
     setProfile(profileRes.data);
     setRoles(rolesRes.data?.map((r) => r.role as UserRole) || []);
@@ -63,8 +70,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsUserDataLoading(true);
 
     userDataPromiseRef.current = fetchUserData(userId)
-      .catch((error) => {
-        console.error('Error fetching user data:', error);
+      .catch(async (error) => {
+        console.error('User access blocked:', error.message);
+
+        // 🚨 FORCE LOGOUT if profile is missing/deleted
+        await supabase.auth.signOut();
+
+        setUser(null);
+        setSession(null);
+        setProfile(null);
+        setRoles([]);
       })
       .finally(() => {
         userDataPromiseRef.current = null;
@@ -74,7 +89,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return userDataPromiseRef.current;
   }, []);
 
-  // Listen for auth state changes
+  // =========================
+  // AUTH LISTENER
+  // =========================
   useEffect(() => {
     let isMounted = true;
 
@@ -113,19 +130,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [ensureUserData]);
 
-  // SIGN IN
+  // =========================
+  // SIGN IN (BLOCK DELETED USERS)
+  // =========================
   async function signIn(email: string, password: string) {
     const normalizedEmail = email.trim().toLowerCase();
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: normalizedEmail,
       password,
     });
 
-    return { error };
+    if (error) return { error };
+
+    // 🚨 VERIFY PROFILE EXISTS
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', data.user.id)
+      .maybeSingle();
+
+    if (!profile) {
+      await supabase.auth.signOut();
+
+      return {
+        error: new Error('Account deleted or disabled'),
+      };
+    }
+
+    return { error: null };
   }
 
-  // SIGN UP (CLEAN VERSION - USES TRIGGER)
+  // =========================
+  // SIGN UP
+  // =========================
   async function signUp(
     email: string,
     password: string,
@@ -142,7 +180,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       options: {
         data: {
           full_name: fullName,
-          role: role,
+          role,
           phone: phone || null,
           location: location || null,
         },
@@ -152,6 +190,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error };
   }
 
+  // =========================
+  // SIGN OUT
+  // =========================
   async function signOut() {
     await supabase.auth.signOut();
     setUser(null);
@@ -164,6 +205,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return roles.includes(role);
   }
 
+  // =========================
+  // FARMER APPROVAL CHECK
+  // =========================
   const isApprovedFarmer =
     roles.includes('farmer') && profile?.approval_status === 'approved';
 

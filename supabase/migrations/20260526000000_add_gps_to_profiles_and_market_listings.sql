@@ -1,0 +1,19 @@
+-- Add GPS coordinates (and optional area fields) to profiles and market_listings
+-- Keep existing `location` TEXT columns as fallback.
+
+ALTER TABLE public.profiles
+ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION,
+ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION,
+ADD COLUMN IF NOT EXISTS county TEXT,
+ADD COLUMN IF NOT EXISTS subcounty TEXT,
+ADD COLUMN IF NOT EXISTS village TEXT,
+ADD COLUMN IF NOT EXISTS ward TEXT;
+
+ALTER TABLE public.market_listings
+ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION,
+ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION,
+ADD COLUMN IF NOT EXISTS county TEXT,
+ADD COLUMN IF NOT EXISTS subcounty TEXT,
+ADD COLUMN IF NOT EXISTS village TEXT,
+ADD COLUMN IF NOT EXISTS ward TEXT;
+

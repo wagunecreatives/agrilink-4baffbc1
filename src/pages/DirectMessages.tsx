@@ -278,8 +278,9 @@ const DirectMessages = () => {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
-      <main className="flex-1 container mx-auto px-4 py-8">
+      <main className="flex-1 container mx-auto px-4 py-4 pb-28 sm:py-8">
         <div className="max-w-5xl mx-auto">
+
           {/* Header */}
           <div className="mb-6 flex items-center justify-between">
             <div>
@@ -392,7 +393,7 @@ const DirectMessages = () => {
             </Card>
 
             {/* Messages Area */}
-            <Card className="md:col-span-2 flex flex-col">
+            <Card className="md:col-span-2 flex flex-col h-full">
               {selectedConversation ? (
                 <>
                   <CardHeader className="border-b py-3">
@@ -471,7 +472,7 @@ const DirectMessages = () => {
                     </ScrollArea>
                     <form
                       onSubmit={handleSendMessage}
-                      className="border-t p-4 flex gap-2"
+                      className="border-t p-4 flex gap-2 bg-background sticky bottom-0"
                     >
                       <Input
                         value={newMessage}
