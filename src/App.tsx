@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { LeafletMarkerFix } from "@/components/map/LeafletMarkerFix";
+
 
 const queryClient = new QueryClient();
 const LandingPage = lazy(() => import("./pages/LandingPage"));
@@ -34,6 +36,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AuthProvider>
+          <LeafletMarkerFix />
           <Suspense
             fallback={
               <div className="flex min-h-screen items-center justify-center bg-background">

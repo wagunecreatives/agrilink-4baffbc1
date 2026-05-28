@@ -27,6 +27,7 @@ export function SmallMapWithMarker({
   return (
     <div className="w-full">
       <MapContainer
+        key={`${center.lat}-${center.lng}`}
         center={center}
         zoom={zoom}
         scrollWheelZoom={false}
@@ -34,7 +35,7 @@ export function SmallMapWithMarker({
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <Marker position={center}>
           {label ? <Popup>{label}</Popup> : null}

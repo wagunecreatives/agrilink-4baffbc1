@@ -66,6 +66,7 @@ export function LocationPickerMap({
       {/* eslint-disable-next-line react/no-children-prop */}
       {/* Ensure the Leaflet panes stay below dropdown menus */}
       <MapContainer
+        key={`${center.lat}-${center.lng}`}
         className="z-0"
         center={center}
         zoom={zoom}
@@ -74,7 +75,7 @@ export function LocationPickerMap({
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
         <LocationClickHandler
