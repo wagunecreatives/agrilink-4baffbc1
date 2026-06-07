@@ -160,40 +160,17 @@ export function CreateListingForm() {
 
       toast.success('Listing created successfully!');
       navigate('/marketplace');
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to create listing');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create listing';
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
+
   };
 
-  if (!isApprovedFarmer) {
-    return (
-      <Card className="max-w-2xl mx-auto">
-        <CardHeader>
-          <CardTitle>Create New Listing</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Only approved farmers can create listings.
-            </AlertDescription>
-          </Alert>
-
-          <Button
-            variant="outline"
-            className="mt-4 w-full"
-            onClick={() => navigate('/marketplace')}
-          >
-            Back to Marketplace
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
+
     <Card className="max-w-2xl mx-auto">
       <CardHeader>
         <CardTitle>Create New Listing</CardTitle>
